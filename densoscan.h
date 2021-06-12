@@ -7,9 +7,10 @@
 #include <QJsonDocument>
 #include <QSocketNotifier>
 #include <QEvent>
+#include <QtCharts>
+#include <QLineSeries>
 
 #include "scanner.h"
-#include "frame.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class DensoScan; }
@@ -151,6 +152,8 @@ class DensoScan : public QMainWindow
     QProfiles profiles;
     DScanner scanner;
 
+    std::vector<std::string> filenames;
+
 private:
   static DensoScan* instance;
 
@@ -165,6 +168,18 @@ public:
 
     void scan ( const std::string &name, std::vector <Box> boxes, Profile * );
     void startScan ();
+
+    void loadDeviceSettings ();
+    void saveDeviceSettings ();
+    void loadProfiles ();
+
+    void enableOptions ( bool enabled );
+    void updateDeviceOptions();
+
+    void drawLogo ();
+
+    QChartView *chartView = nullptr;
+    void drawChart ();
 
 protected:
     void customEvent(QEvent *event); // This overrides QObject::customEvent()
@@ -183,6 +198,12 @@ private slots:
     void on_pushScan_clicked();
 
     void on_pushCancel_clicked();
+
+    void on_toolSelectFolder_clicked();
+
+    void on_outputType_currentIndexChanged(int index);
+
+    void on_comboProfile_currentIndexChanged(int index);
 
 private:
     Ui::DensoScan *ui;

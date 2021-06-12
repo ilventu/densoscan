@@ -1,5 +1,4 @@
 #include "scanner.h"
-#include "frame.h"
 #include "spline.h"
 
 #include <fmt/format.h>
@@ -7,8 +6,10 @@
 
 #include <sys/stat.h>
 
+using namespace std;
+using namespace cv;
+
 SANE_Int version_code = 0;
-bool scanner_debug = true;
 
 std::vector <ScannerDevice> getDevices ()
 {
@@ -81,6 +82,10 @@ void Scanner::open ( const char *name )
     int i;
     for ( i = 0; i < nOptions; i++ )
         optDescriptions[i] = sane_get_option_descriptor ( hDevice, i);
+
+    if ( optExist( SCAN_SOURCE ) )
+        if ( isInDomain( SCAN_SOURCE, "Transparency Unit" ) )
+            optSet ( SCAN_SOURCE, "Transparency Unit" );
 }
 
 void Scanner::close ()
@@ -100,6 +105,7 @@ void Scanner::start ( int *maxx, int *maxy )
 {
     SANE_Status ret;
     ret = sane_start ( hDevice );
+
     if ( ret != SANE_STATUS_GOOD )
         throw std::runtime_error ( fmt::format ( "Start scanning: {}", sane_strstatus( ret ) ) );
 
@@ -116,54 +122,172 @@ void Scanner::start ( int *maxx, int *maxy )
         *maxy = parameters.lines;
 }
 
-void Scanner::optSet ( const char *name, double value )
+Scanner::DomainType Scanner::getDomainType(const char *param)
 {
-    SANE_Status ret;
-    SANE_Int info;
-    SANE_Fixed fix = SANE_FIX(value);
-    ret = sane_control_option ( hDevice, optindex(name), SANE_ACTION_SET_VALUE, &fix, &info);
-
-    if ( ret != SANE_STATUS_GOOD )
-        throw std::runtime_error ( fmt::format ( "Option set {}={}: {}", name, value, sane_strstatus( ret ) ) );
+    int i = optindex( param );
+    return (DomainType) optDescriptions[i]->constraint_type;
 }
 
-void Scanner::optSet ( const char *name, int value )
+int Scanner::optGetMaxI ( const char *name )
 {
-    SANE_Status ret;
-    SANE_Int info;
-    ret = sane_control_option ( hDevice, optindex(name), SANE_ACTION_SET_VALUE, &value, &info);
-
-    if ( ret != SANE_STATUS_GOOD )
-        throw std::runtime_error ( fmt::format ( "Option set {}={}: {}", name, value, sane_strstatus( ret ) ) );
-}
-
-void Scanner::optSet ( const char *name, const char *value )
-{
-    SANE_Status ret;
-    SANE_Int info;
-    ret = sane_control_option ( hDevice, optindex(name), SANE_ACTION_SET_VALUE, (void *)value, &info);
-
-    if ( ret != SANE_STATUS_GOOD )
-        throw std::runtime_error ( fmt::format ( "Option set {}={}: {}", name, value, sane_strstatus( ret ) ) );
+    return optGetMaxD ( name );
 }
 
 double Scanner::optGetMaxD ( const char *name )
 {
-    return SANE_UNFIX(optGetMaxI ( name ));
+    int index = optindex(name);
+    if ( optDescriptions[index]->constraint_type != SANE_CONSTRAINT_RANGE )
+        throw std::runtime_error ( fmt::format ("the \"{}\" parameter does not have a range", name) );
+
+    if ( optDescriptions[index]->type == SANE_TYPE_FIXED )
+        return SANE_UNFIX(optDescriptions[index]->constraint.range->max);
+    else
+        return optDescriptions[index]->constraint.range->max;
 }
+
+int Scanner::optGetMinI ( const char *name )
+{
+    return optGetMaxD ( name );
+}
+
+double Scanner::optGetMinD ( const char *name )
+{
+    int index = optindex(name);
+    if ( optDescriptions[index]->constraint_type != SANE_CONSTRAINT_RANGE )
+        throw std::runtime_error ( fmt::format ("the \"{}\" parameter does not have a range", name) );
+
+    if ( optDescriptions[index]->type == SANE_TYPE_FIXED )
+        return SANE_UNFIX(optDescriptions[index]->constraint.range->min);
+    else
+        return optDescriptions[index]->constraint.range->min;
+}
+
 
 double Scanner::getPpmm ( )
 {
     return optGetI( SCAN_DPI ) / 25.4;
 }
 
-int Scanner::optGetMaxI ( const char *name )
+int Scanner::optType(const char *name)
 {
     int index = optindex(name);
-    if ( optDescriptions[index]->constraint_type != SANE_CONSTRAINT_RANGE )
-        throw std::runtime_error ( fmt::format ("the \"{}\" parameter does not have a range", name) );
 
-    return optDescriptions[index]->constraint.range->max;
+    return optDescriptions[index]->type;
+}
+
+int Scanner::optUnit(const char *name)
+{
+    int index = optindex(name);
+
+    return optDescriptions[index]->unit;
+}
+
+double Scanner::optSet(const char *name, double value)
+{
+    int i = optindex(name);
+    if ( optDescriptions[i]->type == SANE_TYPE_FIXED )
+        return optSetFix ( i, value );
+    else
+        return optSetInt ( i, value );
+}
+
+int Scanner::optSet(const char *name, int value)
+{
+    int i = optindex(name);
+
+    if ( optDescriptions[i]->type == SANE_TYPE_FIXED )
+        return optSetFix ( i, value );
+    else
+        return optSetInt ( i, value );
+}
+
+string Scanner::optSet(const char *name, const char *value)
+{
+    SANE_Status ret = SANE_STATUS_GOOD;
+    SANE_Int info;
+
+    int i = optindex(name);
+
+    bool ok = false;
+
+    if ( optDescriptions[i]->constraint_type == SANE_CONSTRAINT_STRING_LIST )
+    {
+        for ( int ns = 0; optDescriptions[i]->constraint.string_list[ns]; ns++ )
+            if ( !strcmp (optDescriptions[i]->constraint.string_list[ns], value ) )
+                ok = true;
+    }
+    else
+        ok = true;
+
+    if (ok)
+        ret = sane_control_option ( hDevice, i, SANE_ACTION_SET_VALUE, (void *)value, &info);
+
+    if ( ret != SANE_STATUS_GOOD )
+        throw std::runtime_error ( fmt::format ( "Option set {}={}: {}", name, value, sane_strstatus( ret ) ) );
+
+    return optGetS ( i );
+}
+
+double Scanner::optSetFix(int i, double value)
+{
+    SANE_Status ret = SANE_STATUS_GOOD;
+    SANE_Int info = 0;
+
+    if ( optDescriptions[i]->constraint_type == SANE_CONSTRAINT_RANGE )
+    {
+        double quant = SANE_UNFIX( optDescriptions[i]->constraint.range->quant );
+        double min = SANE_UNFIX( optDescriptions[i]->constraint.range->min );
+        double max = SANE_UNFIX( optDescriptions[i]->constraint.range->max );
+        if ( quant == 0 )
+            quant = 1;
+
+        if ( value < min )
+            value = min;
+        else if ( value > max )
+            value = max;
+        else
+        {
+            int n = value / quant;
+            value = n * quant;
+        }
+    }
+
+    SANE_Fixed fix = SANE_FIX((float)value);
+    ret = sane_control_option ( hDevice, i, SANE_ACTION_SET_VALUE, &fix, &info);
+
+    if ( ret != SANE_STATUS_GOOD )
+        throw std::runtime_error ( fmt::format ( "Option set {}={}: {}", optDescriptions[i]->name, value, sane_strstatus( ret ) ) );
+
+    return value;
+}
+
+int Scanner::optSetInt(int i, int value)
+{
+    SANE_Status ret = SANE_STATUS_GOOD;
+    SANE_Int info = 0;
+
+    ret = sane_control_option ( hDevice, i, SANE_ACTION_SET_VALUE, &value, &info);
+
+    if ( ret != SANE_STATUS_GOOD )
+        throw std::runtime_error ( fmt::format ( "Option set {}={}: {}", optDescriptions[i]->name, value, sane_strstatus( ret ) ) );
+
+    return value;
+}
+
+string Scanner::optGetS(int i)
+{
+    SANE_Status ret = SANE_STATUS_GOOD;
+    SANE_Int info;
+
+    char value [1024];
+    memset(value, 1, 1024);
+
+//    ret = sane_control_option ( hDevice, i, SANE_ACTION_GET_VALUE, value, &info);
+
+    if ( ret != SANE_STATUS_GOOD )
+        throw std::runtime_error ( fmt::format ( "Option set {}={}: {}", optDescriptions[i]->name, value, sane_strstatus( ret ) ) );
+
+    return value;
 }
 
 double Scanner::optGetD ( const char *name )
@@ -218,38 +342,123 @@ void Scanner::cancel ( )
     sane_cancel (hDevice);
 }
 
-
-
-void Scanner::doscan ( int height )
+void Scanner::setProfile(const Profile &p)
 {
-    int n = 0;
+    profile.expected = p.expected;
+    profile.measured = p.measured;
+}
 
-    time_t lastTime = time(NULL);
+void Scanner::setDebug(int debug)
+{
+    scanner_debug = debug;
+}
 
-    while ( read() )
+void Scanner::setMode(OutputMode mode)
+{
+    outputMode = mode;
+}
+
+void Scanner::setBrightness(int level)
+{
+    brightness = level;
+}
+
+void Scanner::doscan ( std::vector <cv::Rect2d> boxes )
+{
+    std::vector <Frame> frames;
+
+    unsigned int nboxes;
+    double ymin = 0, ymax = 0;
+
+    for ( nboxes = 0; nboxes < boxes.size(); nboxes++ )
     {
-        for ( unsigned int i = 0; i < frames.size(); i++ )
+        if ( !ymin || ymin > boxes[nboxes].y )
+            ymin = boxes[nboxes].y;
+
+        if ( ymax < ( boxes[nboxes].y + boxes[nboxes].height ) )
+            ymax = boxes[nboxes].y + boxes[nboxes].height;
+    }
+
+    try
+    {
+        if ( optExist( SCAN_SOURCE ) )
+            if ( isInDomain( SCAN_SOURCE, "Transparency Unit" ) )
+                optSet ( SCAN_SOURCE, "Transparency Unit" );
+
+        if ( scanFilmType != "" )
+            optSet ( SCAN_FILM_TYPE, scanFilmType.c_str() );
+
+        optSet ( SCAN_MODE, "Gray" );
+
+        optSet ( SCAN_DEPTH, 16 );
+        optSet ( SCAN_PREVIEW, false );
+
+        if ( optExist( SCAN_DPI ) )
+            optSet ( SCAN_DPI, scanDPI );
+
+        if ( optExist( "x-resolution" ) )
         {
-            if ( frames[i].isinto( nCurrentLine ) )
-                frames[i].addline( pScanBuffer );
-            if ( frames[i].iscomplete( nCurrentLine ) )
+            optSet ( "x-resolution", scanDPI );
+            optSet ( "y-resolution", scanDPI );
+        }
+
+        optSet ( SCAN_SHARP, 2 );
+
+        optSet ( "brightness", brightness );
+
+        optSet ( SCAN_TLY, (double)ymin - 5 );
+        optSet ( SCAN_BRY, (double)ymax + 1 );
+        optSet ( SCAN_TLX, optGetMinD(SCAN_TLX) );
+        optSet ( SCAN_BRX, optGetMaxD(SCAN_BRX) );
+
+        int width, height;
+
+        onProgressUpdate ( "Starting...", 0 );
+        start ( &width, &height );
+
+//        double ppmm = getPpmm();
+        double l = optGetMaxD(SCAN_BRX) - optGetMinD(SCAN_TLX);
+        double ppmm = width / l;
+
+        for ( unsigned i = 0; i < boxes.size(); i++ )
+            frames.push_back( Frame ( boxes[i], ppmm ) );
+
+        int n = 0;
+
+        time_t lastTime = time(NULL);
+
+        nCurrentLine = ( ymin - 5 ) * ppmm;
+        while ( read() )
+        {
+            for ( unsigned int i = 0; i < frames.size(); i++ )
             {
-                frames[i].running = true;
-                Frame *f = &(frames[i]);
-                Scanner *t = this;
-                threads.push_back ( std::thread ( [ t, f, i ] () { t->doprocess( *f, i ); } ) );
+                if ( frames[i].isinto( nCurrentLine ) )
+                    frames[i].addline( pScanBuffer );
+                if ( frames[i].iscomplete( nCurrentLine ) )
+                {
+                    frames[i].running = true;
+                    Frame *f = &(frames[i]);
+                    Scanner *t = this;
+                    threads.push_back ( std::thread ( [ t, f, i ] () { t->doprocess( *f, i ); } ) );
+                }
             }
+
+            n++;
+
+            if ( lastTime != time(NULL) )
+            {
+                onProgressUpdate ( "Scanning...", (double)n / height * 100 );
+                lastTime = time(NULL);
+            }
+
+            nCurrentLine++;
         }
-
-        n++;
-
-        if ( lastTime != time(NULL) )
-        {
-            onProgressUpdate ( "Scanning...", (double)n / height * 100 );
-            lastTime = time(NULL);
-        }
-
-        nCurrentLine++;
+    }
+    catch ( std::runtime_error error )
+    {
+        cancel();
+        onError ( error.what() );
+        onPreviewCompleted( Scan () );
     }
 
     for ( unsigned int i = 0; i < threads.size(); i++)
@@ -284,6 +493,16 @@ std::vector<int> Scanner::getDomainI ( const char *param )
         domain.push_back( optDescriptions[i]->constraint.word_list[nw] );
 
     return domain;
+}
+
+bool Scanner::isInDomain(const char *param, const char *value)
+{
+    std::vector<std::string> domain = getDomainS ( param );
+    std::vector<std::string>::iterator it = find(domain.begin(), domain.end(), value );
+    if (it != domain.end()) {
+        return true;
+    }
+    return false;
 }
 
 void Scanner::dumpopts ()
@@ -329,55 +548,12 @@ void Scanner::dumpopts ()
     }
 }
 
-bool file_exist (const std::string& name) {
-  struct stat buffer;
-  return (stat (name.c_str(), &buffer) == 0);
-}
-
 void Scanner::scan ( std::vector <cv::Rect2d> boxes )
 {
-    onProgressUpdate ( "Starting...", 0 );
-
-    unsigned int nboxes;
-    double ymin = 0, ymax = 0;
-
-    for ( nboxes = 0; nboxes < boxes.size(); nboxes++ )
+    if ( boxes.size() )
     {
-        if ( !ymin || ymin > boxes[nboxes].y )
-            ymin = boxes[nboxes].y;
-
-        if ( ymax < ( boxes[nboxes].y + boxes[nboxes].height ) )
-            ymax = boxes[nboxes].y + boxes[nboxes].height;
-    }
-
-    optSet ( SCAN_TLY, ymin - 5 );
-    optSet ( SCAN_BRY, ymax + 1 );
-
-    if ( nboxes )
-    {
-        int width, height;
-
-        start ( &width, &height );
-
-        // Frame *frames[nboxes];
-/*        vector <std::string> filenames;
-
-        std::string filename;
-        int fofset = 1;
-        for ( unsigned int i = 0; i < nboxes; i++)
-        {
-            filename = fmt::format ( "{}-{}.png", name, i + fofset );
-            while ( file_exist( filename ) )
-                filename = fmt::format ( "{}-{}.png", name, i + ++fofset );
-
-            frames.push_back( Frame ( filename, getPpmm(), boxes[i], profile ) );
-            filenames.push_back(filename);
-        } */
-
-        nCurrentLine = ( ymin - 5 ) * getPpmm();
-
         Scanner *s = this;
-        new std::thread ( [ s, height ] () { s->doscan(height); } );
+        new std::thread ( [ s, boxes ] () { s->doscan(boxes); } );
     }
     else
         onScanCompleted ();
@@ -387,32 +563,75 @@ void Scanner::dopreview ( )
 {
     onProgressUpdate ( "Starting...", 0 );
 
+    int dpi = previewDPI;
+
     Scan image;
 
     try {
-        optSet ( SCAN_DPI, 150 );
-        optSet ( SCAN_SOURCE, "Transparency Unit" );
-        optSet ( SCAN_FILM_TYPE, "Negative Film" );
-        optSet ( SCAN_MODE, "Gray" );
-        optSet ( SCAN_DEPTH, 8 );
-        optSet ( SCAN_PREVIEW, true );
-        optSet ( "brightness", 0 );
-        optSet ( SCAN_SHARP, 0 );
+        if ( optExist( "test-picture" ) )
+            optSet ( "test-picture", "Grid" );
 
-        optSet ( SCAN_TLY, 0 );
-        optSet ( SCAN_BRY, optGetMaxI(SCAN_BRY) );
+        if ( optExist( SCAN_DPI ) )
+            dpi = optSet ( SCAN_DPI, dpi );
 
+        if ( optExist( "x-resolution" ) )
+        {
+            optSet ( "x-resolution", dpi );
+            optSet ( "y-resolution", dpi );
+        }
+
+        if ( optExist( SCAN_MODE ) )
+            optSet ( SCAN_MODE, "Gray" );
+        if ( optExist( SCAN_DEPTH ) )
+            optSet ( SCAN_DEPTH, 8 );
+
+        if ( optExist( SCAN_SOURCE ) )
+            if ( isInDomain( SCAN_SOURCE, "Transparency Unit" ) )
+                optSet ( SCAN_SOURCE, "Transparency Unit" );
+
+        if ( scanFilmType != "" )
+            if ( optExist( SCAN_FILM_TYPE ) )
+                optSet ( SCAN_FILM_TYPE, scanFilmType.c_str() );
+
+        if ( optExist( SCAN_PREVIEW ) )
+            optSet ( SCAN_PREVIEW, true );
+
+        if ( optExist( "brightness" ) )
+            optSet ( "brightness", 0 );
+
+        if ( optExist( SCAN_SHARP ) )
+            optSet ( SCAN_SHARP, 0 );
+
+        if ( optExist( SCAN_TLY ) )
+        {
+            optSet ( SCAN_BRY, optGetMaxD(SCAN_BRY) );
+            optSet ( SCAN_BRX, optGetMaxD(SCAN_BRX) );
+            optSet ( SCAN_TLY, optGetMinD(SCAN_TLX) );
+            optSet ( SCAN_TLX, optGetMinD(SCAN_TLX) );
+        }
+    }
+    catch ( std::runtime_error error )
+    {
+    }
+
+    try
+    {
         int width, height;
         start ( &width, &height );
 
-        image = Scan ( height, width, CV_8UC1, getPpmm() );
+        double l = optGetMaxD(SCAN_BRX) - optGetMinD(SCAN_TLX);
+        double lpmm = width / l;
+        image = Scan ( height, width, CV_8UC1, lpmm );
 
         int x = 0, y = 0, w = image.size().width;
 
         time_t lastTime = 0;
 
-        while ( read () )
+        int len;
+
+        while ( ( len = read () ) )
         {
+            //assert( len == w);
             for ( x = 0; x < w; x++ )
                 image.at<unsigned char>( y, x ) = pScanBuffer [x];
             y++;
@@ -450,7 +669,7 @@ vector <Slot> Scanner::guessSlots ( const Scan &preview )
     vector <Slot> slots;
 
     // since your image has compression artifacts, we have to threshold the image
-    int threshold = 10;
+    int threshold = 16;
     cv::Mat mask = preview > threshold;
 
     // extract contours
@@ -460,7 +679,6 @@ vector <Slot> Scanner::guessSlots ( const Scan &preview )
     cv::Mat output;
     if ( scanner_debug )
         cv::cvtColor( preview, output, cv::COLOR_GRAY2BGR );
-
 
     for( unsigned int i=0; i < contours.size(); ++i)
     {
@@ -509,6 +727,67 @@ vector <Slot> Scanner::guessSlots ( const Scan &preview )
     return slots;
 }
 
+std::vector<string> Scanner::getFilmTypes()
+{
+    if ( optExist(SCAN_FILM_TYPE) )
+        return getDomainS ( SCAN_FILM_TYPE );
+    else
+        return std::vector<std::string>();
+}
+
+std::vector<int> Scanner::getDPIs()
+{
+    std::vector<int> ret;
+
+    if ( optExist( SCAN_DPI ))
+    {
+        if ( getDomainType ( SCAN_DPI ) == range )
+        {
+            int max = optGetMaxI( SCAN_DPI );
+            int dpis [] = { 300, 600, 1200, 3200, 4800, 6400, 9600, 0 };
+
+            for ( int i = 0; dpis[i] && dpis[i] < max; i++ )
+                ret.push_back ( dpis [i] );
+            ret.push_back( max );
+        }
+        else
+        {
+            ret = getDomainI ( SCAN_DPI );
+            while ( ret.size() && ret[0] < 300 )
+                ret.erase( ret.begin());
+        }
+    }
+
+    return ret;
+}
+
+Size Scanner::getPreviewSize()
+{
+    int w, h, t;
+
+    w = optGetMaxI( SCAN_BRX );
+    h = optGetMaxI( SCAN_BRY );
+    t = optUnit( SCAN_BRX );
+
+    if ( t == SANE_UNIT_MM )
+    {
+        double ppmm = previewDPI / 25.4;
+        return cv::Size ( w * ppmm, h * ppmm );
+    }
+    else
+        return cv::Size ( w, h );
+}
+
+void Scanner::setDPI(int dpi)
+{
+    scanDPI = dpi;
+}
+
+void Scanner::setFilmType(const std::string &filmType)
+{
+    scanFilmType = filmType;
+}
+
 void Scanner::guessFrames ( vector<Rect2d> &frames, const Scan &preview, const Slot &holder, Mat &dbgOutput )
 {
     double ppmm = preview.ppmm;
@@ -517,6 +796,8 @@ void Scanner::guessFrames ( vector<Rect2d> &frames, const Scan &preview, const S
 
     holderRect.x = holderRect.x + ( holderRect.width / 2.0 ) - ( holder.frameW * ppmm / 2.0 );
     holderRect.width = holder.frameW * ppmm;
+    if ( ( holderRect.y + holderRect.height ) > preview.size().height )
+        holderRect.height = preview.size().height - holderRect.y;
 
     cv::Mat output;
 
@@ -542,12 +823,14 @@ void Scanner::guessFrames ( vector<Rect2d> &frames, const Scan &preview, const S
     Mat res = input.clone();
     LUT( res, lookUpTable, input);
 
-//    imwrite ( fmt::format ( "frames-gray-{}.png", nb ), input );
+    if ( scanner_debug )
+        imwrite ( "frames-gray.png", input );
 
-    int threshold = 127;
+    int threshold = 200;
     cv::Mat mask = input > threshold;
 
-//    imwrite ( fmt::format ( "frames-mask-{}.png", nb ), mask );
+    if ( scanner_debug )
+        imwrite ( "frames-mask-{}.png", mask );
 
     int w = input.size().width;
     int h = input.size().height;
@@ -580,11 +863,12 @@ void Scanner::guessFrames ( vector<Rect2d> &frames, const Scan &preview, const S
             if ( !in )
             {
                 double size = ( y - gap_end )  / ppmm;
+                double gapSize = ( gap_end - gap_begin ) / ppmm;
 
                 gap_begin = y;
                 in = true;
 
-                if ( ( size <= 37 && size >= 34 ) )
+                if ( size <= 37 && size >= 34 && gapSize < 2.5 )
                 {
                     cv::rectangle( output, Point ( 0, gap_end + 1 ), Point ( w, gap_begin - 1 ), cv::Scalar( 255, 0, 0 ), 4 );
 
@@ -628,7 +912,7 @@ void Scanner::guessFrames ( vector<Rect2d> &frames, const Scan &preview, const S
         {
             size = ends [ i ] - begins [ i ];
 
-            if ( ( begins[i] - prev ) > framedistance )
+            if ( ( begins[i] - prev ) > ( framedistance * .98 ) )
             {
                 begins.insert( begins.begin() + i, begins[i] - framedistance );
                 ends.insert( ends.begin() + i, begins[i] + framesize );
@@ -694,7 +978,14 @@ void Scanner::guessFrames ( vector<Rect2d> &frames, const Scan &preview, const S
             frames.push_back(frame);
 
             if ( scanner_debug )
+            {
                 cv::rectangle( output, box, cv::Scalar( 0, 255, 0 ), 1 );
+                cout << frames.size() << ": ";
+                cout << frame.x << ", ";
+                cout << frame.y << ", ";
+                cout << frame.width << ", ";
+                cout << frame.height << endl;
+            }
         }
     }
 }
@@ -840,6 +1131,13 @@ void processImage(Mat& I, vector<pixel> LUT )
 
 void Scanner::doprocess ( Frame &frame, int frameNumber )
 {
+    if ( outputMode == RAW )
+    {
+        Scan image = frame.scan();
+        onNewScan ( image, frameNumber );
+        return;
+    }
+
     /*////////////////////////////////////////
      *
      * Parameters
@@ -871,8 +1169,8 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
      *
      */
 
-//    if ( scanner_debug )
-//        imwrite ( fmt::format ( dbgfilename, "debug-1-scan"), *image );
+    if ( scanner_debug )
+        imwrite ( fmt::format ( "{}-debug-1-scan.png", frameNumber), frame.scan() );
 
     Mat output;
     if ( scanner_debug )
@@ -895,7 +1193,10 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
     double minVal, maxVal;
 
     // Calibration
-    LUT = getCalibLUT( profile );
+    if ( profile.expected.size())
+        LUT = getCalibLUT( profile );
+    else
+        LUT = getDefLUT ();
     LUT = getLogLUT( LUT );
     processImage( image, LUT );
 
@@ -921,10 +1222,43 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
 
         rotate ( output, rot, ROTATE_90_COUNTERCLOCKWISE);
         cv::resize( rot, rot, Size (), dbg_scale, dbg_scale, cv::INTER_CUBIC );
-        imwrite ( fmt::format ( "{}-debug-2-crop", frameNumber ),  rot );
+        imwrite ( fmt::format ( "{}-debug-2-crop.png", frameNumber ),  rot );
     }
 
     rotate ( image, image, ROTATE_90_COUNTERCLOCKWISE);
 
     onNewScan ( image, frameNumber );
+}
+
+double get_mode ( vector<double> size, double approx )
+{
+    std::sort(size.begin(), size.end(), std::less<double>());
+
+    double number = size[0];
+    double mode = number;
+    int count = 1;
+    int countMode = 1;
+
+    for (unsigned int i = 1; i < size.size(); i++)
+    {
+          if ( size[i] <= number + approx && size[i] >= number - approx )
+          { // count occurrences of the current number
+             ++count;
+            //Average += (NewValue - Average) / NewSampleCount;
+             number += ( size[i] - number ) / count;
+          }
+          else
+          { // now this is a different number
+                if (count > countMode)
+                {
+                      countMode = count; // mode is the biggest ocurrences
+
+                      mode = number;
+                }
+               count = 1; // reset count for the new number
+               number = size[i];
+      }
+    }
+
+    return mode;
 }

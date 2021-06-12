@@ -24,7 +24,6 @@
 
 // https://sane-project.gitlab.io/standard/api.html
 // https://subscription.packtpub.com/book/application_development/9781784391454/1/ch01lvl1sec16/logarithmic-transformations
-extern bool scanner_debug;
 
 typedef struct
 {
@@ -148,7 +147,10 @@ public:
     void addline ( const unsigned char *buffer )
     {
         if ( !current_line )
+        {
             image = cv::Mat ( height, width, CV_16UC1 );
+            image.ppmm = ppmm;
+        }
 
         const unsigned short *src = (const unsigned short *)subbuffer( buffer );
 
@@ -177,6 +179,14 @@ std::vector <ScannerDevice> getDevices ();
 
 class Scanner
 {
+public:
+    typedef enum
+    {
+        ENDBV = 0,
+        RAW
+    }
+    OutputMode;
+
 private:
     // Device
     SANE_Handle hDevice = nullptr;
@@ -189,14 +199,19 @@ private:
     SANE_Byte *pScanBuffer = nullptr;
 
     // Scan status
-    std::vector <Frame> frames;
     std::vector <std::thread> threads;
 
     // Profile
     Profile profile;
 
     // Config
+    int scanner_debug;
     bool keepFrameBorders = true;
+    std::string scanFilmType;
+    int scanDPI = 4800;
+    int previewDPI = 150;
+    OutputMode outputMode = ENDBV;
+    int brightness = 0;
 
 private:
     int optindex ( const char *optname );
@@ -205,53 +220,38 @@ private:
 
     void guessFrames ( std::vector<cv::Rect2d> &frames, const Scan &preview, const Slot &holder, cv::Mat &dbgOutput );
 
-    void doscan ( int height );
+    void doscan ( std::vector <cv::Rect2d> boxes );
     void doprocess ( Frame &frame, int frameNumber );
     void dopreview ( );
-
-    // Callbacks
-    virtual void onNewScan ( Scan &image, int frameNumber ) = 0;
-    virtual void onScanCompleted () = 0;
-    virtual void onPreviewCompleted ( const Scan &preview ) = 0;
-    virtual void onProgressUpdate ( const std::string text, int percent ) = 0;
-    virtual void onError ( std::string error ) = 0;
-
-public:
-    void open ( const char *name );
-    void close ();
-
-    void preview ( );
-    void scan ( std::vector <cv::Rect2d> frames );
-
-    void cancel ();
-
-    void setProfile ( const Profile &p )
-    {
-        profile.expected = p.expected;
-        profile.measured = p.measured;
-    }
-
-    std::vector<cv::Rect2d> guessFrames ( const Scan &preview, const std::vector<Slot> &holders );
-    std::vector <Slot> guessSlots ( const Scan &preview );
-    std::vector<int> getDPI ()
-
-    {
-        std::vector<int> ret = getDomainI ( SCAN_DPI );
-        while ( ret.size() && ret[0] < 300 )
-            ret.erase( ret.begin());
-
-        return ret;
-    }
 
     bool optExist ( const char *name );
 
     double optGetMaxD ( const char *name );
     int optGetMaxI ( const char *name );
+    double optGetMinD ( const char *name );
+    int optGetMinI ( const char *name );
+    int optType (const char *name);
+    int optUnit (const char *name);
 
-    void optIngoreMissing ( bool ignore = true );
-    void optSet ( const char *name, double value );
-    void optSet ( const char *name, int value );
-    void optSet ( const char *name, const char *value );
+    double optSet ( const char *name, double value );
+    int optSet ( const char *name, int value );
+    std::string optSet ( const char *name, const char *value );
+
+    double optSetFix ( int i, double value );
+    int optSetInt ( int i, int value );
+
+    std::string optGetS ( int i );
+
+    typedef enum
+    {
+        none = 0,
+        range,
+        intList,
+        stringList
+    }
+    DomainType;
+
+    DomainType getDomainType ( const char *param );
 
     double optGetD ( const char *name );
     int optGetI ( const char *name );
@@ -263,6 +263,43 @@ public:
 
     std::vector<std::string> getDomainS ( const char *param );
     std::vector<int> getDomainI ( const char *param );
+    bool isInDomain ( const char *param, const char *value );
+
+private:
+    // Callbacks
+    virtual void onNewScan ( Scan &image, int frameNumber ) = 0;
+    virtual void onScanCompleted () = 0;
+    virtual void onPreviewCompleted ( const Scan &preview ) = 0;
+    virtual void onProgressUpdate ( const std::string text, int percent ) = 0;
+    virtual void onError ( std::string error ) = 0;
+
+public:
+    // Scan operations
+    void open ( const char *name );
+    void close ();
+
+    void preview ( );
+    void scan ( std::vector <cv::Rect2d> frames );
+
+    void cancel ();
+
+    // Guess film holder and frames
+    std::vector<cv::Rect2d> guessFrames ( const Scan &preview, const std::vector<Slot> &holders );
+    std::vector <Slot> guessSlots ( const Scan &preview );
+
+    // Parameters domains
+    std::vector<std::string> getFilmTypes ();
+    std::vector<int> getDPIs ();
+
+    cv::Size getPreviewSize ();
+
+    // Parameters
+    void setDPI ( int dpi );
+    void setFilmType ( const std::string &filmType );
+    void setProfile ( const Profile &p = Profile () );
+    void setDebug ( int debug = true );
+    void setMode ( OutputMode mode = ENDBV );
+    void setBrightness ( int level );
 
     void dumpopts ();
 };
