@@ -13,14 +13,17 @@ CONFIG += c++11
 SOURCES += \
     main.cpp \
     densoscan.cpp \
+    options.cpp \
     scanner.cpp
 
 HEADERS += \
     densoscan.h \
+    options.h \
     scanner.h
 
 FORMS += \
-    densoscan.ui
+    densoscan.ui \
+    options.ui
 
 QMAKE_CXXFLAGS += -pthread
 

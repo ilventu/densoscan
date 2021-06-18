@@ -171,6 +171,8 @@ public:
 
     void loadDeviceSettings ();
     void saveDeviceSettings ();
+    void loadOptions ();
+    void saveOptions ();
     void loadProfiles ();
 
     void enableOptions ( bool enabled );
@@ -204,6 +206,8 @@ private slots:
     void on_outputType_currentIndexChanged(int index);
 
     void on_comboProfile_currentIndexChanged(int index);
+
+    void on_pushOptions_clicked();
 
 private:
     Ui::DensoScan *ui;

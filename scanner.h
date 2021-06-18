@@ -22,6 +22,12 @@
 #define SCAN_BRX       "br-x"
 #define SCAN_BRY       "br-y"
 
+#define DEBUG_FRAMES        1
+#define DEBUG_HOLDER        2
+#define DEBUG_RAWSCAN       4
+#define DEBUG_RAWPREVIEW    8
+#define DEBUG_PROCESSCROP   16
+
 // https://sane-project.gitlab.io/standard/api.html
 // https://subscription.packtpub.com/book/application_development/9781784391454/1/ch01lvl1sec16/logarithmic-transformations
 
@@ -31,41 +37,90 @@ typedef struct
     std::vector<double> measured;
 } Profile;
 
+typedef struct tagSlotDef
+{
+    std::string name;
+    double width;
+    double height;
+
+    double frameW;
+    double frameH;
+
+    double frameD;
+    double frameN;
+} SlotDef;
+
+SlotDef const slotDefs[] = { { "Epson 135",       25,   226,  24, 36, 38, 6 },
+                             { "Epson 120",       58,   200,  56, 56, 62, 3 },
+                             { "Penso 135&126",   32,   158,  24, 36, 38, 4 },
+                             { "",                 0,     0,   0,  0,  0, 0 }
+                           };
+
 class Slot : public cv::Rect2d
 {
 public:
-    double frameW = 24;
-    double frameH = 36;
+    double frameW = 0;
+    double frameH = 0;
 
-    double frameD = 38;
-    double frameN = 6;
+    double frameD = 0;
+    double frameN = 1;
 
     double angle = 0;
 
 public:
-    Slot ( cv::Rect rect, double ppmm, double angle )
+    Slot ( cv::Rect rect, double ppmmw, double ppmmh, double ang )
     {
-        x = rect.x / ppmm;
-        y = rect.y / ppmm;
-        width = rect.width / ppmm;
-        height = rect.height / ppmm;
+        x = rect.x / ppmmw;
+        y = rect.y / ppmmh;
+        width = rect.width / ppmmw;
+        height = rect.height / ppmmh;
+        angle = ang;
+
+        int i = 0;
+        double approx = 5 / 100.0;
+        while ( slotDefs[i].width )
+        {
+            if ( width  > ( slotDefs[i].width  - ( slotDefs[i].width  * approx ) ) &&
+                 width  < ( slotDefs[i].width  + ( slotDefs[i].width  * approx ) ) &&
+                 height > ( slotDefs[i].height - ( slotDefs[i].height * approx ) ) &&
+                 height < ( slotDefs[i].height + ( slotDefs[i].height * approx ) ) )
+                    break;
+            i++;
+        }
+
+        if ( slotDefs[i].width )
+        {
+            frameW = slotDefs[i].frameW;
+            frameH = slotDefs[i].frameH;
+            frameD = slotDefs[i].frameD;
+            frameN = slotDefs[i].frameN;
+        }
+        else
+        {
+            frameW = width - ( width * approx );
+            frameH = height - ( height * approx );
+            frameD = 0;
+            frameN = 1;
+        }
     }
 
-    cv::Rect px ( double ppmm ) const
+    cv::Rect px ( double ppmmw, double ppmmh ) const
     {
-        return cv::Rect ( x * ppmm, y * ppmm, width * ppmm, height * ppmm);
+        return cv::Rect ( x * ppmmw, y * ppmmh, width * ppmmw, height * ppmmh );
     }
 };
 
 class Scan : public cv::Mat
 {
 public:
-    double ppmm = 0;
+    double ppmmw = 0;
+    double ppmmh = 0;
 
 public:
-    Scan ( int height, int width, int type, double ppmm ) : cv::Mat ( height, width, type )
+    Scan ( int height, int width, int type, double ppmmw, double ppmmh ) : cv::Mat ( height, width, type )
     {
-        this->ppmm = ppmm;
+        this->ppmmw = ppmmw;
+        this->ppmmh = ppmmh;
     }
 
 /*    Scan ( const Scan &in ) : cv::Mat ( in )
@@ -84,24 +139,32 @@ public:
     }
 };
 
-typedef struct Box
+class Box : public cv::Rect2d
 {
-    double xmm;
-    double ymm;
-    double wmm;
-    double hmm;
-} Box;
+public:
+    double targetw_mm;
+    double targeth_mm;
+
+    Box ( cv::Rect2d in, Slot s ) : cv::Rect2d (in)
+    {
+        targeth_mm = s.frameH;
+        targetw_mm = s.frameW;
+    }
+};
 
 class Frame : public cv::Rect
 {
-    double ppmm = 0;
+    double ppmmw = 0;
+    double ppmmh = 0;
     int bpp = 2;
 
     int current_line = 0;
 
     Scan image;
 
-//    std::string dbgfilename;
+public:
+    double targetw_mm;
+    double targeth_mm;
 
     const unsigned char *subbuffer ( const unsigned char *buffer )
     {
@@ -112,24 +175,24 @@ public:
 
     bool running = false;
 
-    Frame ( cv::Rect2d &rectmm, double ppmm )
+    Frame ( Box &rectmm, double ppmmw, double ppmmh )
     {
-        x = rectmm.x * ppmm;
-        y = rectmm.y * ppmm;
-        width = rectmm.width * ppmm;
-        height = rectmm.height * ppmm;
+        x = rectmm.x * ppmmw;
+        y = rectmm.y * ppmmh;
+        width = rectmm.width * ppmmw;
+        height = rectmm.height * ppmmh;
 
-        this->ppmm = ppmm;
-//        this->filename = filename;
+        this->ppmmw = ppmmw;
+        this->ppmmh = ppmmh;
 
-//        dbgfilename = filename;
-//        dbgfilename.replace( dbgfilename.find_last_of('.'), 0, "-{}");
+        targetw_mm = rectmm.targetw_mm;
+        targeth_mm = rectmm.targeth_mm;
     }
 
-    Frame ( const Scan &image )
+/*    Frame ( const Scan &image )
     {
         this->image = image;
-    }
+    } */
 
     bool isinto ( int line )
     {
@@ -149,7 +212,8 @@ public:
         if ( !current_line )
         {
             image = cv::Mat ( height, width, CV_16UC1 );
-            image.ppmm = ppmm;
+            image.ppmmw = ppmmw;
+            image.ppmmh = ppmmh;
         }
 
         const unsigned short *src = (const unsigned short *)subbuffer( buffer );
@@ -219,8 +283,9 @@ private:
     int read ( );
 
     void guessFrames ( std::vector<cv::Rect2d> &frames, const Scan &preview, const Slot &holder, cv::Mat &dbgOutput );
+    void guessRegularFrames( std::vector<Box>  &frames, const Scan &preview, const Slot &holder, cv::Mat &dbgOutput);
 
-    void doscan ( std::vector <cv::Rect2d> boxes );
+    void doscan ( std::vector <Box> boxes );
     void doprocess ( Frame &frame, int frameNumber );
     void dopreview ( );
 
@@ -279,12 +344,12 @@ public:
     void close ();
 
     void preview ( );
-    void scan ( std::vector <cv::Rect2d> frames );
+    void scan ( std::vector <Box> frames );
 
     void cancel ();
 
     // Guess film holder and frames
-    std::vector<cv::Rect2d> guessFrames ( const Scan &preview, const std::vector<Slot> &holders );
+    std::vector<Box> guessFrames ( const Scan &preview, const std::vector<Slot> &holders );
     std::vector <Slot> guessSlots ( const Scan &preview );
 
     // Parameters domains
@@ -295,9 +360,14 @@ public:
 
     // Parameters
     void setDPI ( int dpi );
+    void setPreviewDPI ( int dpi );
+    int getPreviewDPI (  );
+    void setDebug ( int debug );
+    int getDebug ();
+
+
     void setFilmType ( const std::string &filmType );
     void setProfile ( const Profile &p = Profile () );
-    void setDebug ( int debug = true );
     void setMode ( OutputMode mode = ENDBV );
     void setBrightness ( int level );
 

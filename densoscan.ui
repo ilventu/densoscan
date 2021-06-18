@@ -335,6 +335,17 @@ text-align: center;
          </widget>
         </item>
         <item>
+         <widget class="QPushButton" name="pushOptions">
+          <property name="text">
+           <string/>
+          </property>
+          <property name="icon">
+           <iconset theme="preferences-system-symbolic">
+            <normaloff>.</normaloff>.</iconset>
+          </property>
+         </widget>
+        </item>
+        <item>
          <widget class="QPushButton" name="pushCancel">
           <property name="enabled">
            <bool>false</bool>

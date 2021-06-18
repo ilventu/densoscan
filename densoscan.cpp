@@ -18,6 +18,8 @@ using namespace std;
 #include "densoscan.h"
 #include "ui_densoscan.h"
 
+#include "options.h"
+
 #define LMAX        65535.0
 #define LUT_SIZE    (LMAX + 1)
 typedef unsigned short pixel;
@@ -91,6 +93,8 @@ DensoScan::DensoScan(QWidget *parent)
 
     ui->setupUi(this);
 
+    loadOptions();
+
     QSettings settingsProfiles ("denso", "profiles" );
     QFile qFile  ( settingsProfiles.fileName() );
     qFile.open(QIODevice::ReadOnly);
@@ -110,11 +114,15 @@ DensoScan::DensoScan(QWidget *parent)
     ui->startingIndex->setCurrentText( settings.value("startingIndex").toString() );
     settings.endGroup();
 
-    scanner.setDebug(true);
+/*Scan preview = imread( "preview-120-ko.png", IMREAD_GRAYSCALE );
+preview.ppmmw = preview.ppmmh = 150 / 25.4; // 5.9;// 11.8110;
+onPreviewCompleted( preview );
+//scanner.dumpopts ();  // */
 }
 
 DensoScan::~DensoScan()
 {
+    saveOptions();
     delete ui;
 }
 
@@ -146,6 +154,24 @@ void DensoScan::saveDeviceSettings()
         settings.setValue( "profile", ui->comboProfile->currentText() );
     if ( ui->outputType->isEnabled() )
         settings.setValue( "outputType", ui->outputType->currentIndex() );
+    settings.endGroup();
+}
+
+void DensoScan::loadOptions()
+{
+    QSettings settings("denso", "scan" );
+    settings.beginGroup( "options" );
+    scanner.setPreviewDPI( settings.value("previewDPI", 75 ).toInt() );
+    scanner.setDebug( settings.value("debugMode", 0 ).toInt() );
+    settings.endGroup();
+}
+
+void DensoScan::saveOptions()
+{
+    QSettings settings("denso", "scan" );
+    settings.beginGroup( "options" );
+    settings.setValue( "previewDPI", scanner.getPreviewDPI() );
+    settings.setValue( "debugMode", scanner.getDebug() );
     settings.endGroup();
 }
 
@@ -437,10 +463,6 @@ int prv = 0;
 
 void DensoScan::on_pushScan_clicked()
 {
-/*    Scan preview = imread( "preview-test.png", IMREAD_GRAYSCALE );
-    preview.ppmm = 150 / 25.4; // 5.9;// 11.8110;
-    onPreviewCompleted( preview ); // */
-//scanner.dumpopts ();
     QSettings settings("denso", "scan" );
     settings.beginGroup("main");
     settings.setValue( "device", ui->comboDevice->currentText() );
@@ -460,7 +482,7 @@ void DensoScan::on_pushScan_clicked()
 void DensoScan::on_pushCancel_clicked()
 {
     scanner.cancel();
-    ui->pushCancel->setEnabled(false);
+//    ui->pushCancel->setEnabled(false);
     onProgressUpdate( "Aborting...", 100 );
 }
 
@@ -493,8 +515,8 @@ void DensoScan::onPreviewCompleted ( const Scan &preview )
         return;
     }
 
-    imwrite("preview.png", preview);
-    double ppmm = preview.ppmm;
+    double ppmmw = preview.ppmmw;
+    double ppmmh = preview.ppmmh;
 
     cv::Mat output;
     cv::cvtColor( preview, output, cv::COLOR_GRAY2BGR);
@@ -503,7 +525,7 @@ void DensoScan::onPreviewCompleted ( const Scan &preview )
     rotate ( output, output, ROTATE_90_COUNTERCLOCKWISE);
 
     vector<Slot> holders = scanner.guessSlots ( preview );
-    vector<Rect2d> frames = scanner.guessFrames ( preview, holders );
+    vector<Box> frames = scanner.guessFrames ( preview, holders );
 
     filenames.clear();
     int offset = 0;
@@ -532,9 +554,9 @@ void DensoScan::onPreviewCompleted ( const Scan &preview )
         return fmt::format ( "{}", offset );
     };
 
-    double fontSize = ppmm / 2;
-    int fontTic = round ( ppmm / 2);
-    int rectTic = round ( ppmm / 3);
+    double fontSize = ppmmh / 2;
+    int fontTic = round ( ppmmh / 2);
+    int rectTic = round ( ppmmh / 3);
     for ( unsigned int f = 0; f < frames.size(); f++ )
     {
         while ( file_exist( fmt::format ( "{} ({}).png", name, framenumber(offset) ) ) )
@@ -542,7 +564,7 @@ void DensoScan::onPreviewCompleted ( const Scan &preview )
 
         filenames.push_back( fmt::format ( "{} ({}).png", name, framenumber(offset) ) );
 
-        Rect rect_frame ( frames[f].y * ppmm, output.size().height - ( frames[f].x + frames[f].width ) * ppmm, frames[f].height * ppmm, frames[f].width * ppmm );
+        Rect rect_frame ( frames[f].y * ppmmh, output.size().height - ( frames[f].x + frames[f].width ) * ppmmw, frames[f].height * ppmmh, frames[f].width * ppmmw );
 
         cv::rectangle( output, rect_frame, agfa_red, rectTic );
         int baseline = 0;
@@ -554,8 +576,6 @@ void DensoScan::onPreviewCompleted ( const Scan &preview )
             cv::FONT_HERSHEY_DUPLEX, fontSize, agfa_red, fontTic, cv::LINE_AA );
         offset++;
     }
-
-    imwrite ( "preview-output.png", output );
 
     QImage imDraw = cvMatToQImage( output );
     QPixmap px = QPixmap::fromImage ( imDraw );
@@ -681,5 +701,18 @@ void DensoScan::on_outputType_currentIndexChanged(int index)
 void DensoScan::on_comboProfile_currentIndexChanged(int index)
 {
     drawChart();
+}
+
+void DensoScan::on_pushOptions_clicked()
+{
+    Options opt;
+    int previewDPI = scanner.getPreviewDPI();
+    bool keepFrameBorders = 0;
+    int debug = scanner.getDebug();
+
+    opt.doModal( previewDPI, keepFrameBorders, debug );
+
+    scanner.setPreviewDPI( previewDPI );
+    scanner.setDebug( debug );
 }
 
