@@ -77,7 +77,7 @@ public:
         angle = ang;
 
         int i = 0;
-        double approx = 5 / 100.0;
+        double approx = 10 / 100.0;
         while ( slotDefs[i].width )
         {
             if ( width  > ( slotDefs[i].width  - ( slotDefs[i].width  * approx ) ) &&
