@@ -700,7 +700,7 @@ vector <Slot> Scanner::guessSlots ( const Scan &preview )
     vector <Slot> slots;
 
     // since your image has compression artifacts, we have to threshold the image
-    int threshold = 16;
+    int threshold = 8;
     cv::Mat mask = preview > threshold;
 
     // extract contours
@@ -726,7 +726,14 @@ vector <Slot> Scanner::guessSlots ( const Scan &preview )
         rotatedRect.points( rect_points );
         float  angle = rotatedRect.angle; // angle
 
-        slots.push_back( Slot ( rotatedRect.boundingRect(), preview.ppmmw, preview.ppmmh, angle ) );
+        Rect slot = rotatedRect.boundingRect();
+        if ( slot.x < 0 )
+        {
+            slot.width += slot.x;
+            slot.x = 0;
+        }
+
+        slots.push_back( Slot ( slot, preview.ppmmw, preview.ppmmh, angle ) );
 
         if ( scanner_debug & DEBUG_HOLDER)
         {
@@ -1120,6 +1127,7 @@ void Scanner::guessRegularFrames ( std::vector<Box> &frames, const Scan &preview
     }
 
     double decrop = ( holder.frameD - holder.frameH );// * .9;
+    cv::threshold ( preview, input, 254, 255, cv::THRESH_TOZERO_INV );
 
     for ( int i = 0; i < holder.frameN; i++ )
     {
@@ -1129,37 +1137,40 @@ void Scanner::guessRegularFrames ( std::vector<Box> &frames, const Scan &preview
         box.width = mask.size().width;
         box.height = holder.frameD * ppmmh - frameGap;
 
-        double m = mean ( preview (box) )[0];
-        if ( m < 220 )
+        if ( box.y > 0 && (box.y + box.height) < input.size().height )
         {
-            Rect2d frame;
-
-            if ( !keepFrameBorders )
+            double m = mean ( input (box) )[0];
+            if ( m > 10 )
             {
-                frame.x = ( box.x / ppmmw ) + ( decrop / 2 );
-                frame.width = ( box.width / ppmmw ) - decrop;
-            }
-            else
-            {
-                frame.x = box.x / ppmmw;
-                frame.width = box.width / ppmmw;
-            }
+                Rect2d frame;
 
-            frame.y = ( box.y / ppmmh ) - ( decrop / 2 );
-            frame.height = ( box.height / ppmmh ) + decrop;
+                if ( !keepFrameBorders )
+                {
+                    frame.x = ( box.x / ppmmw ) + ( decrop / 2 );
+                    frame.width = ( box.width / ppmmw ) - decrop;
+                }
+                else
+                {
+                    frame.x = box.x / ppmmw;
+                    frame.width = box.width / ppmmw;
+                }
 
-            frames.push_back( Box ( frame, holder ) );
+                frame.y = ( box.y / ppmmh ) - ( decrop / 2 );
+                frame.height = ( box.height / ppmmh ) + decrop;
 
-            if ( scanner_debug & DEBUG_FRAMES )
-            {
-                cv::rectangle( dbgOutput, box, cv::Scalar( 0, 255, 0 ), 1 );
-                cv::rectangle( dbgOutput, Rect ( frame.x * ppmmw, frame.y * ppmmh, frame.width * ppmmw, frame.height * ppmmh), cv::Scalar( 0, 0, 255 ), 1 );
-                imwrite ( "frames-output.png", dbgOutput );
-                cout << frames.size() << ": ";
-                cout << frame.x << ", ";
-                cout << frame.y << ", ";
-                cout << frame.width << ", ";
-                cout << frame.height << endl;
+                frames.push_back( Box ( frame, holder ) );
+
+                if ( scanner_debug & DEBUG_FRAMES )
+                {
+                    cv::rectangle( dbgOutput, box, cv::Scalar( 0, 255, 0 ), 1 );
+                    cv::rectangle( dbgOutput, Rect ( frame.x * ppmmw, frame.y * ppmmh, frame.width * ppmmw, frame.height * ppmmh), cv::Scalar( 0, 0, 255 ), 1 );
+                    imwrite ( "frames-output.png", dbgOutput );
+                    cout << frames.size() << ": ";
+                    cout << frame.x << ", ";
+                    cout << frame.y << ", ";
+                    cout << frame.width << ", ";
+                    cout << frame.height << endl;
+                }
             }
         }
     }
@@ -1403,8 +1414,8 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
 
     if ( frame.targeth_mm > frame.targetw_mm  )
         rotate ( image, image, ROTATE_90_COUNTERCLOCKWISE);
-//    else
-//        rotate ( image, image, ROTATE_180);
+    else
+        rotate ( image, image, ROTATE_180);
 
     onNewScan ( image, frameNumber );
 }

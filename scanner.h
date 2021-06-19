@@ -50,7 +50,7 @@ typedef struct tagSlotDef
     double frameN;
 } SlotDef;
 
-SlotDef const slotDefs[] = { { "Epson 135",       25,   226,  24, 36, 38, 6 },
+SlotDef const slotDefs[] = { { "Epson 135",       26,   226,  24, 36, 38, 6 },
                              { "Epson 120",       58,   200,  56, 56, 62, 3 },
                              { "Penso 135&126",   32,   158,  24, 36, 38, 4 },
                              { "",                 0,     0,   0,  0,  0, 0 }
@@ -77,7 +77,7 @@ public:
         angle = ang;
 
         int i = 0;
-        double approx = 10 / 100.0;
+        double approx = 16 / 100.0;
         while ( slotDefs[i].width )
         {
             if ( width  > ( slotDefs[i].width  - ( slotDefs[i].width  * approx ) ) &&
