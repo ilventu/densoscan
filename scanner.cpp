@@ -700,7 +700,7 @@ vector <Slot> Scanner::guessSlots ( const Scan &preview )
     vector <Slot> slots;
 
     // since your image has compression artifacts, we have to threshold the image
-    int threshold = 8;
+    int threshold = 16;
     cv::Mat mask = preview > threshold;
 
     // extract contours
@@ -716,9 +716,13 @@ vector <Slot> Scanner::guessSlots ( const Scan &preview )
         // fit bounding rectangle around contour
         cv::RotatedRect rotatedRect = cv::minAreaRect(contours[i]);
 
-        int area = rotatedRect.boundingRect().area();
+        Rect slot = rotatedRect.boundingRect();
+        int area = slot.area();
 
-        if ( area < ( 24 * preview.ppmmw * 36 * preview.ppmmh ) )
+        if ( slot.width == preview.size().width && slot.height == preview.size().height )
+            continue;
+
+        if (   area < ( 24 * preview.ppmmw * 36 * preview.ppmmh ) )
             continue;
 
         // read points and angle
@@ -726,7 +730,6 @@ vector <Slot> Scanner::guessSlots ( const Scan &preview )
         rotatedRect.points( rect_points );
         float  angle = rotatedRect.angle; // angle
 
-        Rect slot = rotatedRect.boundingRect();
         if ( slot.x < 0 )
         {
             slot.width += slot.x;

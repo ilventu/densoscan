@@ -53,6 +53,7 @@ typedef struct tagSlotDef
 SlotDef const slotDefs[] = { { "Epson 135",       26,   226,  24, 36, 38, 6 },
                              { "Epson 120",       58,   200,  56, 56, 62, 3 },
                              { "Penso 135&126",   32,   158,  24, 36, 38, 4 },
+                             { "Penso 127",       42,   158,  40, 40, 46, 3 },
                              { "",                 0,     0,   0,  0,  0, 0 }
                            };
 
