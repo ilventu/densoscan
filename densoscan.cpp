@@ -114,6 +114,8 @@ DensoScan::DensoScan(QWidget *parent)
     ui->startingIndex->setCurrentText( settings.value("startingIndex").toString() );
     settings.endGroup();
 
+//    preview = imread ( "preview-output.png" );
+
 /*Scan preview = imread( "preview-120-ko.png", IMREAD_GRAYSCALE );
 preview.ppmmw = preview.ppmmh = 150 / 25.4; // 5.9;// 11.8110;
 onPreviewCompleted( preview );
@@ -212,7 +214,7 @@ void DensoScan::on_comboDevice_currentIndexChanged(int index)
     scanner.open( name.toStdString().c_str() );
 
     updateDeviceOptions();
-    drawLogo();
+    drawPreview();
 }
 
 void DensoScan::updateDeviceOptions()
@@ -258,31 +260,55 @@ void DensoScan::updateDeviceOptions()
    loadDeviceSettings();
 }
 
-void DensoScan::drawLogo()
+void DensoScan::drawPreview()
 {
-    QImage logo ( QString ( ":/icon/icon.png" ) );
-    Size size = scanner.getPreviewSize();
-    if ( size.height > 256 )
+    if ( !preview.size().width )
     {
-        if ( size.width > 1000 )
-        {
-            double scale = 1000.0 / size.width;
-            size.width *= scale;
-            size.height *= scale;
-        }
+        QImage logo ( QString ( ":/icon/icon.png" ) );
+        Size2d scanSize = scanner.getPreviewSize();
+        QSize labelSize = ui->preview->size();
 
-        QImage preview ( size.height, size.width, QImage::Format_ARGB32 );
-        QPainter painter(&preview);
-        painter.fillRect( 0, 0, size.height, size.width, QColor( 0, 0, 0 ));
+//cout << "label: " << labelSize.width() << "x" << labelSize.height() << endl;
 
-        QImage scaled = logo.scaledToHeight( std::min( size.width, size.height ) * .90, Qt::SmoothTransformation );
-        QRect target ( ( size.height - scaled.size().width()) / 2, ( size.width - scaled.size().height()) / 2, scaled.size().width(), scaled.size().height() );
+        double xScale = labelSize.height() / scanSize.width;
+        double yScale = labelSize.width() / scanSize.height;
+
+        xScale = xScale > 1 ? 1 : xScale;
+        yScale = yScale > 1 ? 1 : yScale;
+
+        double scale = min( xScale, yScale );
+
+//cout << "scale: " << scale << endl;
+
+        Size outSize;
+        outSize.width = scanSize.width * scale;
+        outSize.height = scanSize.height * scale;
+
+//cout << "out: " << outSize.width << "x" << outSize.height << endl;
+
+        QImage imDraw ( outSize.height, outSize.width, QImage::Format_ARGB32 );
+        QPainter painter(&imDraw);
+        painter.fillRect( 0, 0, outSize.height, outSize.width, QColor( 0, 0, 0 ));
+
+        QImage scaled = logo.scaled( outSize.height * .9, outSize.width *.9, Qt::KeepAspectRatio, Qt::SmoothTransformation );
+        QRect target ( ( outSize.height - scaled.size().width()) / 2, ( outSize.width - scaled.size().height()) / 2, scaled.size().width(), scaled.size().height() );
 
         painter.drawImage( target, scaled );
 
-        QPixmap px = QPixmap::fromImage ( preview );
+        QPixmap px = QPixmap::fromImage ( imDraw );
         ui->preview->setPixmap(px);
     }
+    else
+    {
+        QSize labelSize = ui->preview->size();
+
+        QImage imDraw = cvMatToQImage( preview );
+        QImage scaled = imDraw.scaled( labelSize.width(), labelSize.height(), Qt::KeepAspectRatio, Qt::SmoothTransformation );
+
+        QPixmap px = QPixmap::fromImage ( scaled );
+        ui->preview->setPixmap ( px );
+    }
+
 }
 
 void DensoScan::drawChart()
@@ -473,7 +499,8 @@ void DensoScan::on_pushScan_clicked()
     saveDeviceSettings();
 
     enableOptions ( false );
-    drawLogo();
+    preview = Mat ();
+    drawPreview();
 
     scanner.preview();
 }
@@ -501,9 +528,15 @@ void DensoScan::onError ( const std::string &error )
     //messageBox.setFixedSize(500,200);
 }
 
+void DensoScan::resizeEvent(QResizeEvent *evt)
+{
+    QMainWindow::resizeEvent(evt);
+    drawPreview( );
+}
+
 bool file_exist (const std::string& name) {
-  struct stat buffer;
-  return (stat (name.c_str(), &buffer) == 0);
+    struct stat buffer;
+    return (stat (name.c_str(), &buffer) == 0);
 }
 
 void DensoScan::onPreviewCompleted ( const Scan &preview )
@@ -577,9 +610,11 @@ void DensoScan::onPreviewCompleted ( const Scan &preview )
         offset++;
     }
 
-    QImage imDraw = cvMatToQImage( output );
+    this->preview = output.clone();
+    drawPreview ();
+/*    QImage imDraw = cvMatToQImage( output );
     QPixmap px = QPixmap::fromImage ( imDraw );
-    ui->preview->setPixmap ( px );
+    ui->preview->setPixmap ( px ); */
 
     Scanner::OutputMode mode = (Scanner::OutputMode)(ui->outputType->currentIndex());
     string filmType = ui->comboType->currentText().toStdString();
