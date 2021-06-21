@@ -16,10 +16,10 @@ Options::~Options()
     delete ui;
 }
 
-void Options::doModal(int &previewDPI, bool &keepFrameBorders, int &scanner_debug)
+void Options::doModal(int &previewDPI, bool &skipBeginning, int &scanner_debug)
 {
     ui->comboDPI->setCurrentText( QString::number ( previewDPI ) );
-    ui->comboCanvas->setCurrentIndex( keepFrameBorders );
+    ui->checkSkip->setChecked( skipBeginning );
 
     ui->checkFrames->setChecked( scanner_debug & DEBUG_FRAMES );
     ui->checkHolder->setChecked( scanner_debug & DEBUG_HOLDER );
@@ -30,7 +30,7 @@ void Options::doModal(int &previewDPI, bool &keepFrameBorders, int &scanner_debu
     if ( exec() )
     {
         previewDPI = ui->comboDPI->currentText().toInt();
-        keepFrameBorders = ui->comboCanvas->currentIndex();
+        skipBeginning = ui->checkSkip->isChecked();
 
         scanner_debug = 0;
         scanner_debug |= ui->checkFrames->isChecked() ? DEBUG_FRAMES : 0;

@@ -165,6 +165,7 @@ void DensoScan::loadOptions()
     settings.beginGroup( "options" );
     scanner.setPreviewDPI( settings.value("previewDPI", 75 ).toInt() );
     scanner.setDebug( settings.value("debugMode", 0 ).toInt() );
+    scanner.setSkipBegining( settings.value("skipBegining", false ).toBool() );
     settings.endGroup();
 }
 
@@ -174,6 +175,7 @@ void DensoScan::saveOptions()
     settings.beginGroup( "options" );
     settings.setValue( "previewDPI", scanner.getPreviewDPI() );
     settings.setValue( "debugMode", scanner.getDebug() );
+    settings.setValue( "skipBegining", scanner.getSkipBegining() );
     settings.endGroup();
 }
 
@@ -414,6 +416,7 @@ void DensoScan::enableOptions ( bool enabled  )
     ui->startingIndex->setEnabled(enabled);
 
     ui->pushScan->setEnabled( enabled );
+    ui->pushOptions->setEnabled( enabled );
     ui->pushCancel->setEnabled( !enabled );
 
     if ( enabled )
@@ -742,12 +745,13 @@ void DensoScan::on_pushOptions_clicked()
 {
     Options opt;
     int previewDPI = scanner.getPreviewDPI();
-    bool keepFrameBorders = 0;
+    bool skipBeginning = scanner.getSkipBegining();
     int debug = scanner.getDebug();
 
-    opt.doModal( previewDPI, keepFrameBorders, debug );
+    opt.doModal( previewDPI, skipBeginning, debug );
 
     scanner.setPreviewDPI( previewDPI );
     scanner.setDebug( debug );
+    scanner.setSkipBegining( skipBeginning );
 }
 

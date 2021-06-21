@@ -272,6 +272,7 @@ private:
     // Config
     int scanner_debug;
     bool keepFrameBorders = true;
+    bool skipBegining = false;
     std::string scanFilmType;
     int scanDPI = 4800;
     int previewDPI = 150;
@@ -363,8 +364,11 @@ public:
     void setDPI ( int dpi );
     void setPreviewDPI ( int dpi );
     int getPreviewDPI (  );
+
     void setDebug ( int debug );
     int getDebug ();
+    void setSkipBegining(bool newSkipBegining);
+    bool getSkipBegining() const;
 
 
     void setFilmType ( const std::string &filmType );

@@ -45,6 +45,16 @@ std::vector <ScannerDevice> getDevices ()
     return devices;
 }
 
+void Scanner::setSkipBegining(bool newSkipBegining)
+{
+    skipBegining = newSkipBegining;
+}
+
+bool Scanner::getSkipBegining() const
+{
+    return skipBegining;
+}
+
 int Scanner::optindex ( const char *optname )
 {
     for ( SANE_Int i = 0; i < nOptions; i++ )
@@ -404,7 +414,8 @@ void Scanner::doscan ( std::vector <Box> boxes )
 
         optSet ( "brightness", brightness );
 
-ymin = optGetMinD(SCAN_TLY);
+        if ( !skipBegining )
+            ymin = optGetMinD(SCAN_TLY);
 
         optSet ( SCAN_TLY, (double)ymin );
         optSet ( SCAN_BRY, (double)ymax );
