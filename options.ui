@@ -34,7 +34,7 @@
     <rect>
      <x>10</x>
      <y>10</y>
-     <width>188</width>
+     <width>193</width>
      <height>189</height>
     </rect>
    </property>
@@ -51,20 +51,6 @@
       <property name="text">
        <string>Debug</string>
       </property>
-     </widget>
-    </item>
-    <item row="1" column="1">
-     <widget class="QComboBox" name="comboCanvas">
-      <item>
-       <property name="text">
-        <string>Keep holder</string>
-       </property>
-      </item>
-      <item>
-       <property name="text">
-        <string>Decrop</string>
-       </property>
-      </item>
      </widget>
     </item>
     <item row="0" column="0">
@@ -84,7 +70,7 @@
     <item row="1" column="0">
      <widget class="QLabel" name="label_3">
       <property name="text">
-       <string>Canvas</string>
+       <string>Scan</string>
       </property>
      </widget>
     </item>
@@ -114,6 +100,11 @@
       </item>
       <item>
        <property name="text">
+        <string>300</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
         <string/>
        </property>
       </item>
@@ -130,6 +121,13 @@
      <widget class="QCheckBox" name="checkRawPreview">
       <property name="text">
        <string>Raw preview</string>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="1">
+     <widget class="QCheckBox" name="checkSkip">
+      <property name="text">
+       <string>Skip beginning</string>
       </property>
      </widget>
     </item>

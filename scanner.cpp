@@ -45,6 +45,16 @@ std::vector <ScannerDevice> getDevices ()
     return devices;
 }
 
+void Scanner::setSkipBegining(bool newSkipBegining)
+{
+    skipBegining = newSkipBegining;
+}
+
+bool Scanner::getSkipBegining() const
+{
+    return skipBegining;
+}
+
 int Scanner::optindex ( const char *optname )
 {
     for ( SANE_Int i = 0; i < nOptions; i++ )
@@ -374,6 +384,9 @@ void Scanner::doscan ( std::vector <Box> boxes )
             ymax = boxes[nboxes].y + boxes[nboxes].height;
     }
 
+    ymin -= 5;
+    ymax += 1;
+
     try
     {
         if ( optExist( SCAN_SOURCE ) )
@@ -401,8 +414,11 @@ void Scanner::doscan ( std::vector <Box> boxes )
 
         optSet ( "brightness", brightness );
 
-        optSet ( SCAN_TLY, (double)ymin - 5 );
-        optSet ( SCAN_BRY, (double)ymax + 1 );
+        if ( !skipBegining )
+            ymin = optGetMinD(SCAN_TLY);
+
+        optSet ( SCAN_TLY, (double)ymin );
+        optSet ( SCAN_BRY, (double)ymax );
         optSet ( SCAN_TLX, optGetMinD(SCAN_TLX) );
         optSet ( SCAN_BRX, optGetMaxD(SCAN_BRX) );
 
@@ -442,7 +458,7 @@ void Scanner::doscan ( std::vector <Box> boxes )
 
         time_t lastTime = time(NULL);
 
-        nCurrentLine = ( ymin - 5 ) * ppmmh;
+        nCurrentLine = ymin * ppmmh;
         while ( read() )
         {
             for ( unsigned int i = 0; i < frames.size(); i++ )
@@ -703,7 +719,7 @@ vector <Slot> Scanner::guessSlots ( const Scan &preview )
     cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_NONE);
 
     cv::Mat output;
-    if ( scanner_debug | DEBUG_HOLDER )
+    if ( scanner_debug & DEBUG_HOLDER )
         cv::cvtColor( preview, output, cv::COLOR_GRAY2BGR );
 
     for( unsigned int i=0; i < contours.size(); ++i)
@@ -711,9 +727,13 @@ vector <Slot> Scanner::guessSlots ( const Scan &preview )
         // fit bounding rectangle around contour
         cv::RotatedRect rotatedRect = cv::minAreaRect(contours[i]);
 
-        int area = rotatedRect.boundingRect().area();
+        Rect slot = rotatedRect.boundingRect();
+        int area = slot.area();
 
-        if ( area < ( 24 * preview.ppmmw * 36 * preview.ppmmh ) )
+        if ( slot.width == preview.size().width && slot.height == preview.size().height )
+            continue;
+
+        if (   area < ( 24 * preview.ppmmw * 36 * preview.ppmmh ) )
             continue;
 
         // read points and angle
@@ -721,9 +741,15 @@ vector <Slot> Scanner::guessSlots ( const Scan &preview )
         rotatedRect.points( rect_points );
         float  angle = rotatedRect.angle; // angle
 
-        slots.push_back( Slot ( rotatedRect.boundingRect(), preview.ppmmw, preview.ppmmh, angle ) );
+        if ( slot.x < 0 )
+        {
+            slot.width += slot.x;
+            slot.x = 0;
+        }
 
-        if ( scanner_debug  | DEBUG_HOLDER)
+        slots.push_back( Slot ( slot, preview.ppmmw, preview.ppmmh, angle ) );
+
+        if ( scanner_debug & DEBUG_HOLDER)
         {
             // draw bounding rect
             cv::rectangle( output, rotatedRect.boundingRect(), cv::Scalar( 255, 0,255 ), 3 );
@@ -744,7 +770,7 @@ vector <Slot> Scanner::guessSlots ( const Scan &preview )
 
     stable_sort( slots.begin(), slots.end(), compare_boxes );
 
-    if ( scanner_debug | DEBUG_HOLDER)
+    if ( scanner_debug & DEBUG_HOLDER)
     {
         imwrite ( "slots-mask.png", mask );
         imwrite ( "slots-output.png", output );
@@ -848,7 +874,7 @@ void Scanner::guessFrames ( vector<Rect2d> &frames, const Scan &preview, const S
 
     cv::Mat output;
 
-    if ( scanner_debug | DEBUG_FRAMES )
+    if ( scanner_debug & DEBUG_FRAMES )
         output = dbgOutput ( holderRect );
 
     Mat input;
@@ -870,13 +896,13 @@ void Scanner::guessFrames ( vector<Rect2d> &frames, const Scan &preview, const S
     Mat res = input.clone();
     LUT( res, lookUpTable, input);
 
-    if ( scanner_debug | DEBUG_FRAMES )
+    if ( scanner_debug & DEBUG_FRAMES )
         imwrite ( "frames-gray.png", input );
 
     int threshold = 200;
     cv::Mat mask = input > threshold;
 
-    if ( scanner_debug | DEBUG_FRAMES )
+    if ( scanner_debug & DEBUG_FRAMES )
         imwrite ( "frames-mask.png", mask );
 
     int w = input.size().width;
@@ -917,14 +943,14 @@ void Scanner::guessFrames ( vector<Rect2d> &frames, const Scan &preview, const S
 
                 if ( size <= 37 && size >= 34 && gapSize < 2.5 )
                 {
-                    if ( scanner_debug | DEBUG_FRAMES )
+                    if ( scanner_debug & DEBUG_FRAMES )
                         cv::rectangle( output, Point ( 0, gap_end + 1 ), Point ( w, gap_begin - 1 ), cv::Scalar( 255, 0, 0 ), 4 );
 
                     begins.push_back( gap_end );
                     ends.push_back( gap_begin );
                 }
                 else
-                    if ( scanner_debug | DEBUG_FRAMES )
+                    if ( scanner_debug & DEBUG_FRAMES )
                         cv::rectangle( output, Point ( 0, gap_end + 1 ), Point ( w, gap_begin - 1 ), cv::Scalar( 0, 0, 255 ), 1 );
             }
         }
@@ -1024,7 +1050,7 @@ void Scanner::guessFrames ( vector<Rect2d> &frames, const Scan &preview, const S
 
             frames.push_back(frame);
 
-            if ( scanner_debug | DEBUG_FRAMES )
+            if ( scanner_debug & DEBUG_FRAMES )
             {
                 cv::rectangle( output, box, cv::Scalar( 0, 255, 0 ), 1 );
                 cout << frames.size() << ": ";
@@ -1051,15 +1077,15 @@ void Scanner::guessRegularFrames ( std::vector<Box> &frames, const Scan &preview
 
     Rect holderRect = holder.px (ppmmw, ppmmh);
 
-    holderRect.x = holderRect.x + ( holderRect.width / 2.0 ) - ( holder.frameW * ppmmw / 2.0 );
-    holderRect.width = holder.frameW * ppmmw;
+//    holderRect.x = holderRect.x + ( holderRect.width / 2.0 ) - ( holder.frameW * ppmmw / 2.0 );
+//    holderRect.width = holder.frameW * ppmmw;
     if ( ( holderRect.y + holderRect.height ) > preview.size().height )
         holderRect.height = preview.size().height - holderRect.y;
 
-    cv::Mat output;
+//    cv::Mat output;
 
-    if ( scanner_debug )
-        output = dbgOutput ( holderRect );
+//    if ( scanner_debug & DEBUG_FRAMES )
+//        output = dbgOutput ( holderRect );
 
     Mat input;
     preview ( holderRect ).copyTo( input );
@@ -1080,14 +1106,14 @@ void Scanner::guessRegularFrames ( std::vector<Box> &frames, const Scan &preview
     Mat res = input.clone();
     LUT( res, lookUpTable, input);
 
-    if ( scanner_debug | DEBUG_FRAMES )
+    if ( scanner_debug & DEBUG_FRAMES )
         imwrite ( "frames-gray.png", input );
 
     int threshold = 200;
     cv::Mat mask; // = input > threshold;
     cv::threshold ( input, mask, threshold, 255, cv::THRESH_TOZERO );
 
-    if ( scanner_debug | DEBUG_FRAMES )
+    if ( scanner_debug & DEBUG_FRAMES )
         imwrite ( "frames-mask.png", mask );
 
 //    int w = input.size().width;
@@ -1114,45 +1140,51 @@ void Scanner::guessRegularFrames ( std::vector<Box> &frames, const Scan &preview
         }
     }
 
-    double decrop = ( holder.frameD - holder.frameH ) * .9;
+    double decrop = ( holder.frameD - holder.frameH );// * .9;
+    cv::threshold ( preview, input, 254, 255, cv::THRESH_TOZERO_INV );
 
     for ( int i = 0; i < holder.frameN; i++ )
     {
         Rect box;
-        box.x = 0;
-        box.y = stripOffset + holder.frameD * ppmmh * i;
+        box.x = holderRect.x;
+        box.y = holderRect.y + stripOffset + holder.frameD * ppmmh * i;
         box.width = mask.size().width;
         box.height = holder.frameD * ppmmh - frameGap;
 
-        double m = mean ( preview (holderRect)(box) )[0];
-        if ( m < 240 )
+        if ( box.y > 0 && (box.y + box.height) < input.size().height )
         {
-            Rect2d frame;
-
-            if ( !keepFrameBorders )
+            double m = mean ( input (box) )[0];
+            if ( m > 10 )
             {
-                frame.x = ( holderRect.x / ppmmw ) - ( decrop / 2 );
-                frame.width = ( holderRect.width / ppmmw ) + decrop;
-            }
-            else
-            {
-                frame.x = holder.x;
-                frame.width = holder.width;
-            }
+                Rect2d frame;
 
-            frame.y = holder.y + ( box.y / ppmmh ) - ( decrop / 2 );
-            frame.height = ( box.height / ppmmh ) + decrop;
+                if ( !keepFrameBorders )
+                {
+                    frame.x = ( box.x / ppmmw ) + ( decrop / 2 );
+                    frame.width = ( box.width / ppmmw ) - decrop;
+                }
+                else
+                {
+                    frame.x = box.x / ppmmw;
+                    frame.width = box.width / ppmmw;
+                }
 
-            frames.push_back( Box ( frame, holder ) );
+                frame.y = ( box.y / ppmmh ) - ( decrop / 2 );
+                frame.height = ( box.height / ppmmh ) + decrop;
 
-            if ( scanner_debug )
-            {
-                cv::rectangle( output, box, cv::Scalar( 0, 255, 0 ), 1 );
-                cout << frames.size() << ": ";
-                cout << frame.x << ", ";
-                cout << frame.y << ", ";
-                cout << frame.width << ", ";
-                cout << frame.height << endl;
+                frames.push_back( Box ( frame, holder ) );
+
+                if ( scanner_debug & DEBUG_FRAMES )
+                {
+                    cv::rectangle( dbgOutput, box, cv::Scalar( 0, 255, 0 ), 1 );
+                    cv::rectangle( dbgOutput, Rect ( frame.x * ppmmw, frame.y * ppmmh, frame.width * ppmmw, frame.height * ppmmh), cv::Scalar( 0, 0, 255 ), 1 );
+                    imwrite ( "frames-output.png", dbgOutput );
+                    cout << frames.size() << ": ";
+                    cout << frame.x << ", ";
+                    cout << frame.y << ", ";
+                    cout << frame.width << ", ";
+                    cout << frame.height << endl;
+                }
             }
         }
     }
@@ -1163,13 +1195,13 @@ vector<Box> Scanner::guessFrames ( const Scan &preview, const vector<Slot> &hold
     vector<Box> ret;
 
     Mat dbgOutput;
-    if ( scanner_debug | DEBUG_FRAMES )
+    if ( scanner_debug & DEBUG_FRAMES )
         cv::cvtColor( preview, dbgOutput, cv::COLOR_GRAY2BGR);
 
     for ( unsigned int i = 0; i < holders.size(); i++ )
         guessRegularFrames ( ret, preview, holders[i], dbgOutput );
 
-    if ( scanner_debug | DEBUG_FRAMES )
+    if ( scanner_debug & DEBUG_FRAMES )
         imwrite ( "frames-output.png", dbgOutput );
 
     return ret;
@@ -1336,11 +1368,11 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
      *
      */
 
-    if ( scanner_debug | DEBUG_RAWSCAN )
+    if ( scanner_debug & DEBUG_RAWSCAN )
         imwrite ( fmt::format ( "{}-debug-1-scan.png", frameNumber), frame.scan() );
 
     Mat output;
-    if ( scanner_debug | DEBUG_PROCESSCROP)
+    if ( scanner_debug & DEBUG_PROCESSCROP)
     {
         Mat img8;
         image.convertTo(img8, CV_8UC1, 1. / 256.);
@@ -1378,7 +1410,7 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
 
 //    imwrite( filename, rot );
 
-    if ( scanner_debug | DEBUG_PROCESSCROP)
+    if ( scanner_debug & DEBUG_PROCESSCROP)
     {
         cv::Scalar dbg_color ( 52, 167, 252 );
         cv::line(output, Point ( 0, crop.y ), Point ( w, crop.y ), dbg_color, dbg_line );
@@ -1396,8 +1428,8 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
 
     if ( frame.targeth_mm > frame.targetw_mm  )
         rotate ( image, image, ROTATE_90_COUNTERCLOCKWISE);
-//    else
-//        rotate ( image, image, ROTATE_180);
+    else
+        rotate ( image, image, ROTATE_180);
 
     onNewScan ( image, frameNumber );
 }
