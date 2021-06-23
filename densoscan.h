@@ -152,6 +152,8 @@ class DensoScan : public QMainWindow
     QProfiles profiles;
     DScanner scanner;
 
+    cv::Mat preview;
+
     std::vector<std::string> filenames;
 
 private:
@@ -178,7 +180,7 @@ public:
     void enableOptions ( bool enabled );
     void updateDeviceOptions();
 
-    void drawLogo ();
+    void drawPreview ();
 
     QChartView *chartView = nullptr;
     void drawChart ();
@@ -191,6 +193,8 @@ protected:
     void onPreviewCompleted ( const Scan &preview );
     void onProgressUpdate ( const std::string text, int percent );
     void onError ( const std::string &error );
+
+    void resizeEvent(QResizeEvent*evt);
 
 private slots:
     void on_buttonRefresh_clicked();

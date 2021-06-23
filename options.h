@@ -15,7 +15,7 @@ public:
     explicit Options(QWidget *parent = nullptr);
     ~Options();
 
-    void doModal ( int &previewDPI, bool &keepFrameBorders, int &scanner_debug );
+    void doModal ( int &previewDPI, bool &skipBeginning, int &scanner_debug );
 
 private:
     Ui::Options *ui;

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>780</width>
-    <height>333</height>
+    <width>960</width>
+    <height>348</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -340,8 +340,8 @@ text-align: center;
            <string/>
           </property>
           <property name="icon">
-           <iconset theme="preferences-system-symbolic">
-            <normaloff>.</normaloff>.</iconset>
+           <iconset resource="densoscan.qrc">
+            <normaloff>:/icon/options.png</normaloff>:/icon/options.png</iconset>
           </property>
          </widget>
         </item>
@@ -368,6 +368,18 @@ text-align: center;
     </item>
     <item>
      <widget class="QLabel" name="preview">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Ignored" vsizetype="Ignored">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="minimumSize">
+       <size>
+        <width>550</width>
+        <height>330</height>
+       </size>
+      </property>
       <property name="text">
        <string/>
       </property>
@@ -376,6 +388,8 @@ text-align: center;
    </layout>
   </widget>
  </widget>
- <resources/>
+ <resources>
+  <include location="densoscan.qrc"/>
+ </resources>
  <connections/>
 </ui>
