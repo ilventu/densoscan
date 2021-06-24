@@ -155,6 +155,7 @@ class DensoScan : public QMainWindow
     cv::Mat preview;
 
     std::vector<std::string> filenames;
+    std::vector <std::thread> threads;
 
 private:
   static DensoScan* instance;
