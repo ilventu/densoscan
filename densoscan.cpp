@@ -518,6 +518,10 @@ void DensoScan::on_pushCancel_clicked()
 
 void DensoScan::onScanCompleted ()
 {
+    for ( unsigned int i = 0; i < threads.size(); i++)
+        threads[i].join();
+
+    threads.clear();
     enableOptions( true );
 }
 
@@ -640,7 +644,8 @@ void DensoScan::onPreviewCompleted ( const Scan &preview )
 
 void DensoScan::onNewScan ( Scan &image, int frameNumber )
 {
-    imwrite ( filenames[frameNumber], image );
+    std::string filename = filenames[frameNumber];
+    threads.push_back ( std::thread ( [ filename, &image ] () { imwrite ( filename, image ); } ) );
 }
 
 void DensoScan::customEvent(QEvent * event)
