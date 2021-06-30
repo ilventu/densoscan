@@ -275,8 +275,8 @@ void DensoScan::drawPreview()
         double xScale = labelSize.height() / scanSize.width;
         double yScale = labelSize.width() / scanSize.height;
 
-        xScale = xScale > 1 ? 1 : xScale;
-        yScale = yScale > 1 ? 1 : yScale;
+/*        xScale = xScale > 1 ? 1 : xScale;
+        yScale = yScale > 1 ? 1 : yScale; */
 
         double scale = min( xScale, yScale );
 
@@ -645,7 +645,7 @@ void DensoScan::onPreviewCompleted ( const Scan &preview )
 void DensoScan::onNewScan ( Scan &image, int frameNumber )
 {
     std::string filename = filenames[frameNumber];
-    threads.push_back ( std::thread ( [ filename, &image ] () { imwrite ( filename, image ); } ) );
+    threads.push_back ( std::thread ( [ filename, image ] () { imwrite ( filename, image ); } ) );
 }
 
 void DensoScan::customEvent(QEvent * event)

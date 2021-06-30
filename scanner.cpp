@@ -1130,7 +1130,7 @@ void Scanner::guessRegularFrames ( std::vector<Box> &frames, const Scan &preview
         double avg = 0;
         for ( int i = 1; i < holder.frameN; i++ )
         {
-            Rect gap ( 0, offset + i * (holder.frameD * ppmmh) - frameGap, mask.size().width, frameGap );
+            Rect gap ( mask.size().width / 4, offset + i * (holder.frameD * ppmmh) - frameGap, mask.size().width / 2, frameGap );
             avg += mean ( mask(gap) ).val[0];
         }
         if ( avg > avgmax )
