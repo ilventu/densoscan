@@ -266,39 +266,48 @@ void DensoScan::drawPreview()
 {
     if ( !preview.size().width )
     {
-        QImage logo ( QString ( ":/icon/icon.png" ) );
-        Size2d scanSize = scanner.getPreviewSize();
-        QSize labelSize = ui->preview->size();
+        try
+        {
+            QImage logo ( QString ( ":/icon/icon.png" ) );
+            Size2d scanSize = scanner.getPreviewSize();
+            QSize labelSize = ui->preview->size();
 
-//cout << "label: " << labelSize.width() << "x" << labelSize.height() << endl;
+    //cout << "label: " << labelSize.width() << "x" << labelSize.height() << endl;
 
-        double xScale = labelSize.height() / scanSize.width;
-        double yScale = labelSize.width() / scanSize.height;
+            double xScale = labelSize.height() / scanSize.width;
+            double yScale = labelSize.width() / scanSize.height;
 
-/*        xScale = xScale > 1 ? 1 : xScale;
-        yScale = yScale > 1 ? 1 : yScale; */
+    /*        xScale = xScale > 1 ? 1 : xScale;
+            yScale = yScale > 1 ? 1 : yScale; */
 
-        double scale = min( xScale, yScale );
+            double scale = min( xScale, yScale );
 
-//cout << "scale: " << scale << endl;
+    //cout << "scale: " << scale << endl;
 
-        Size outSize;
-        outSize.width = scanSize.width * scale;
-        outSize.height = scanSize.height * scale;
+            Size outSize;
+            outSize.width = scanSize.width * scale;
+            outSize.height = scanSize.height * scale;
 
-//cout << "out: " << outSize.width << "x" << outSize.height << endl;
+    //cout << "out: " << outSize.width << "x" << outSize.height << endl;
 
-        QImage imDraw ( outSize.height, outSize.width, QImage::Format_ARGB32 );
-        QPainter painter(&imDraw);
-        painter.fillRect( 0, 0, outSize.height, outSize.width, QColor( 0, 0, 0 ));
+            QImage imDraw ( outSize.height, outSize.width, QImage::Format_ARGB32 );
+            QPainter painter(&imDraw);
+            painter.fillRect( 0, 0, outSize.height, outSize.width, QColor( 0, 0, 0 ));
 
-        QImage scaled = logo.scaled( outSize.height * .9, outSize.width *.9, Qt::KeepAspectRatio, Qt::SmoothTransformation );
-        QRect target ( ( outSize.height - scaled.size().width()) / 2, ( outSize.width - scaled.size().height()) / 2, scaled.size().width(), scaled.size().height() );
+            QImage scaled = logo.scaled( outSize.height * .9, outSize.width *.9, Qt::KeepAspectRatio, Qt::SmoothTransformation );
+            QRect target ( ( outSize.height - scaled.size().width()) / 2, ( outSize.width - scaled.size().height()) / 2, scaled.size().width(), scaled.size().height() );
 
-        painter.drawImage( target, scaled );
+            painter.drawImage( target, scaled );
 
-        QPixmap px = QPixmap::fromImage ( imDraw );
-        ui->preview->setPixmap(px);
+            QPixmap px = QPixmap::fromImage ( imDraw );
+            ui->preview->setPixmap(px);
+        }
+        catch ( std::runtime_error error )
+        {
+            QMessageBox messageBox;
+            messageBox.critical( 0, "Error", error.what() );
+            messageBox.show();
+        }
     }
     else
     {

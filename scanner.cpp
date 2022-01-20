@@ -61,7 +61,7 @@ int Scanner::optindex ( const char *optname )
         if ( optDescriptions[i]->name && !strcmp ( optDescriptions[i]->name, optname ) )
             return i;
 
-    throw fmt::format ( "option \"{}\" not found", optname);
+    throw std::runtime_error ( fmt::format ( "option \"{}\" not found", optname) );
 }
 
 bool Scanner::optExist ( const char *name )
@@ -1338,6 +1338,27 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
         return;
     }
 
+    if ( scanner_debug & DEBUG_RAWSCAN )
+        imwrite ( fmt::format ( "{}-debug-1-scan.png", frameNumber), frame.scan() );
+
+    /*////////////////////////////////////////
+     *
+     * sharpen
+     *
+     */
+
+    double sigma = 6, threshold = 0, amount = 0.6;
+
+    Mat blurred;
+    GaussianBlur(frame.scan() , blurred, Size(), sigma, sigma);
+    Mat lowContrastMask = abs(frame.scan() - blurred) < threshold;
+    Mat sharpened = frame.scan()*(1+amount) + blurred*(-amount);
+    frame.scan().copyTo(sharpened, lowContrastMask);
+    sharpened.copyTo ( frame.scan() );
+
+    if ( scanner_debug & DEBUG_RAWSCAN )
+        imwrite ( fmt::format ( "{}-debug-1-sharpen.png", frameNumber), frame.scan() );
+
     /*////////////////////////////////////////
      *
      * Parameters
@@ -1367,9 +1388,6 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
      * Check and convert image
      *
      */
-
-    if ( scanner_debug & DEBUG_RAWSCAN )
-        imwrite ( fmt::format ( "{}-debug-1-scan.png", frameNumber), frame.scan() );
 
     Mat output;
     if ( scanner_debug & DEBUG_PROCESSCROP)
@@ -1430,6 +1448,15 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
         rotate ( image, image, ROTATE_90_COUNTERCLOCKWISE);
     else
         rotate ( image, image, ROTATE_180);
+
+    /*////////////////////////////////////////
+     *
+     * process
+     *
+     */
+
+    double ratio = 4800.0 / 6400.0;
+    resize( image, image, Size(), ratio, ratio, INTER_CUBIC );
 
     onNewScan ( image, frameNumber );
 }
