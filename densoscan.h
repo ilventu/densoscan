@@ -214,6 +214,8 @@ private slots:
 
     void on_pushOptions_clicked();
 
+    void on_comboDPI_currentTextChanged(const QString &arg1);
+
 private:
     Ui::DensoScan *ui;
 };

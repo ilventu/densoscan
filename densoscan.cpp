@@ -28,6 +28,9 @@ typedef unsigned short pixel;
 #define TYPE_SPACE 0
 
 #define OPT_UNAVAILABLE "Unavailable"
+#define OPT_UNCHANGED   "Unchanged"
+
+int outputDPIs [] = { 600, 1200, 2400, 3200, 4800, 6400 };
 
 inline QImage  cvMatToQImage( const cv::Mat &inMat )
 {
@@ -141,6 +144,8 @@ void DensoScan::loadDeviceSettings()
     if ( ui->outputType->isEnabled() )
         ui->outputType->setCurrentIndex( settings.value("outputType").toInt() );
 
+    ui->comboOutputDPI->setCurrentText( settings.value("outputDPI").toString() );
+
     settings.endGroup();
 }
 
@@ -156,6 +161,9 @@ void DensoScan::saveDeviceSettings()
         settings.setValue( "profile", ui->comboProfile->currentText() );
     if ( ui->outputType->isEnabled() )
         settings.setValue( "outputType", ui->outputType->currentIndex() );
+
+    settings.setValue( "outputDPI", ui->comboOutputDPI->currentText() );
+
     settings.endGroup();
 }
 
@@ -257,6 +265,11 @@ void DensoScan::updateDeviceOptions()
         ui->comboDPI->addItem( OPT_UNAVAILABLE );
         ui->comboDPI->setCurrentText( OPT_UNAVAILABLE );
         ui->comboDPI->setEnabled(false);
+
+        ui->comboOutputDPI->clear();
+        ui->comboOutputDPI->addItem( OPT_UNAVAILABLE );
+        ui->comboOutputDPI->setCurrentText( OPT_UNAVAILABLE );
+        ui->comboOutputDPI->setEnabled(false);
     }
 
    loadDeviceSettings();
@@ -422,6 +435,7 @@ void DensoScan::enableOptions ( bool enabled  )
     ui->rollName->setEnabled(enabled);
     ui->comboType->setEnabled(enabled);
     ui->comboDPI->setEnabled(enabled);
+    ui->comboOutputDPI->setEnabled(enabled);
     ui->startingIndex->setEnabled(enabled);
 
     ui->pushScan->setEnabled( enabled );
@@ -635,6 +649,7 @@ void DensoScan::onPreviewCompleted ( const Scan &preview )
     Scanner::OutputMode mode = (Scanner::OutputMode)(ui->outputType->currentIndex());
     string filmType = ui->comboType->currentText().toStdString();
     int DPI = ui->comboDPI->currentText().toInt();
+    int outputDPI = ui->comboOutputDPI->currentText().toInt();
     int profile = ui->comboProfile->currentIndex() - 1;
     int brightness = ui->brightness->value();
 
@@ -646,6 +661,7 @@ void DensoScan::onPreviewCompleted ( const Scan &preview )
     scanner.setMode( mode );
     scanner.setFilmType( filmType );
     scanner.setDPI( DPI );
+    scanner.setOutputDPI( outputDPI );
     scanner.setBrightness( brightness );
 
     scanner.scan ( frames ); // */
@@ -727,7 +743,7 @@ void DensoScan::on_toolSelectFolder_clicked()
 
 void DensoScan::on_outputType_currentIndexChanged(int index)
 {
-    if ( index == 1 )
+    if ( index == Scanner::RAW )
     {
         QSettings settings("denso", "scan" );
         settings.beginGroup( ui->comboDevice->currentText() );
@@ -767,5 +783,24 @@ void DensoScan::on_pushOptions_clicked()
     scanner.setPreviewDPI( previewDPI );
     scanner.setDebug( debug );
     scanner.setSkipBegining( skipBeginning );
+}
+
+void DensoScan::on_comboDPI_currentTextChanged(const QString &arg1)
+{
+    int currentDPI = ui->comboDPI->currentText().toInt();
+    int currentOutputDPI = ui->comboOutputDPI->currentText().toInt();
+
+    ui->comboOutputDPI->clear();
+    ui->comboOutputDPI->addItem( OPT_UNCHANGED );
+    ui->comboOutputDPI->setEnabled(false);
+
+    for ( unsigned i = 0; i < sizeof ( outputDPIs ) / sizeof (int); i++ )
+        if ( outputDPIs[i] < currentDPI )
+        {
+           ui->comboOutputDPI->addItem( QString::number( outputDPIs[i] ) );
+           ui->comboOutputDPI->setEnabled(true);
+        }
+
+    ui->comboOutputDPI->setCurrentText( QString::number( currentOutputDPI ) );
 }
 

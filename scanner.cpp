@@ -55,6 +55,11 @@ bool Scanner::getSkipBegining() const
     return skipBegining;
 }
 
+void Scanner::setDetectionMode ( DetectionMode m )
+{
+    detectionMode = m;
+}
+
 int Scanner::optindex ( const char *optname )
 {
     for ( SANE_Int i = 0; i < nOptions; i++ )
@@ -817,6 +822,9 @@ Size Scanner::getPreviewSize()
 {
     int w, h, t;
 
+    if ( !hDevice )
+        return cv::Size ( 768, 1024 );
+
     w = optGetMaxI( SCAN_BRX );
     h = optGetMaxI( SCAN_BRY );
     t = optUnit( SCAN_BRX );
@@ -833,6 +841,11 @@ Size Scanner::getPreviewSize()
 void Scanner::setDPI(int dpi)
 {
     scanDPI = dpi;
+}
+
+void Scanner::setOutputDPI(int dpi)
+{
+    outputDPI = dpi;
 }
 
 void Scanner::setPreviewDPI(int dpi)
@@ -1065,7 +1078,7 @@ void Scanner::guessFrames ( vector<Rect2d> &frames, const Scan &preview, const S
 
 void Scanner::guessRegularFrames ( std::vector<Box> &frames, const Scan &preview, const Slot &holder, cv::Mat &dbgOutput )
 {
-    if ( holder.frameN <= 1 )
+    if ( detectionMode == autoFullStrip || holder.frameN <= 1 )
     {
         Box frame ( holder, holder );
         frames.push_back(frame);
@@ -1077,8 +1090,6 @@ void Scanner::guessRegularFrames ( std::vector<Box> &frames, const Scan &preview
 
     Rect holderRect = holder.px (ppmmw, ppmmh);
 
-//    holderRect.x = holderRect.x + ( holderRect.width / 2.0 ) - ( holder.frameW * ppmmw / 2.0 );
-//    holderRect.width = holder.frameW * ppmmw;
     if ( ( holderRect.y + holderRect.height ) > preview.size().height )
         holderRect.height = preview.size().height - holderRect.y;
 
@@ -1347,7 +1358,7 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
      *
      */
 
-    double sigma = 6, threshold = 0, amount = 0.6;
+    double sigma = scanDPI / 3000.0, threshold = 0, amount = 1.6; //0.6;
 
     Mat blurred;
     GaussianBlur(frame.scan() , blurred, Size(), sigma, sigma);
@@ -1417,14 +1428,17 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
     LUT = getLogLUT( LUT );
     processImage( image, LUT );
 
-    // Min/Max avg 1/10
-    Mat dst;
-    double factor = .25;
-    resize( image(crop), dst, cv::Size(), factor, factor, cv::INTER_LINEAR_EXACT);
-    minMaxLoc(dst, &minVal, &maxVal);
+    if ( outputMode == ENDBV )
+    {
+        // Min/Max avg 1/10
+        Mat dst;
+        double factor = .25;
+        resize( image(crop), dst, cv::Size(), factor, factor, cv::INTER_LINEAR_EXACT);
+        minMaxLoc(dst, &minVal, &maxVal);
 
-    LUT = getNormLUT( minVal, maxVal );
-    processImage( image, LUT );
+        LUT = getNormLUT( minVal, maxVal );
+        processImage( image, LUT );
+    }
 
 //    imwrite( filename, rot );
 
@@ -1451,12 +1465,15 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
 
     /*////////////////////////////////////////
      *
-     * process
+     * resize
      *
      */
 
-    double ratio = 4800.0 / 6400.0;
-    resize( image, image, Size(), ratio, ratio, INTER_CUBIC );
+    if ( outputDPI )
+    {
+        double ratio = outputDPI / (double)scanDPI;
+        resize( image, image, Size(), ratio, ratio, INTER_CUBIC );
+    }
 
     onNewScan ( image, frameNumber );
 }

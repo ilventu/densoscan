@@ -50,8 +50,8 @@ typedef struct tagSlotDef
     double frameN;
 } SlotDef;
 
-SlotDef const slotDefs[] = { { "Epson 135",       26,   226,  24, 36, 38, 6 },
-                             { "Epson 120",       58,   200,  56, 56, 62, 3 },
+SlotDef const slotDefs[] = { { "Epson v850 135",       26,   226,  24, 36, 38, 6 },
+                             { "Epson v850 120",       58,   200,  56, 56, 62, 3 },
                              { "Penso 135&126",   32,   158,  24, 36, 38, 4 },
                              { "Penso 127",       42,   158,  40, 40, 46, 3 },
                              { "",                 0,     0,   0,  0,  0, 0 }
@@ -248,6 +248,7 @@ public:
     typedef enum
     {
         ENDBV = 0,
+        UENDBV,
         RAW
     }
     OutputMode;
@@ -275,8 +276,9 @@ private:
     bool skipBegining = false;
     std::string scanFilmType;
     int scanDPI = 4800;
+    int outputDPI = 0;
     int previewDPI = 150;
-    OutputMode outputMode = ENDBV;
+    OutputMode outputMode = UENDBV;
     int brightness = 0;
 
 private:
@@ -317,6 +319,15 @@ private:
         stringList
     }
     DomainType;
+
+    typedef enum
+    {
+        automatic = 0,
+        autoFullStrip
+    }
+    DetectionMode;
+
+    DetectionMode detectionMode = automatic;
 
     DomainType getDomainType ( const char *param );
 
@@ -362,6 +373,8 @@ public:
 
     // Parameters
     void setDPI ( int dpi );
+    void setOutputDPI ( int dpi );
+    void setDetectionMode ( DetectionMode m );
     void setPreviewDPI ( int dpi );
     int getPreviewDPI (  );
 
