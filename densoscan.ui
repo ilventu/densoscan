@@ -112,7 +112,7 @@
          </layout>
         </item>
         <item row="8" column="4">
-         <widget class="QComboBox" name="comboBox">
+         <widget class="QComboBox" name="comboDetectionMode">
           <item>
            <property name="text">
             <string>Auto</string>

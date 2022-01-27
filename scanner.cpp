@@ -1358,7 +1358,7 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
      *
      */
 
-    double sigma = scanDPI / 3000.0, threshold = 0, amount = 1.6; //0.6;
+    double sigma = scanDPI / 4000.0, threshold = 0, amount = 1.2; //0.6;
 
     Mat blurred;
     GaussianBlur(frame.scan() , blurred, Size(), sigma, sigma);

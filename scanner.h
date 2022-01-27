@@ -242,6 +242,13 @@ ScannerDevice;
 
 std::vector <ScannerDevice> getDevices ();
 
+typedef enum
+{
+    automatic = 0,
+    autoFullStrip
+}
+DetectionMode;
+
 class Scanner
 {
 public:
@@ -319,13 +326,6 @@ private:
         stringList
     }
     DomainType;
-
-    typedef enum
-    {
-        automatic = 0,
-        autoFullStrip
-    }
-    DetectionMode;
 
     DetectionMode detectionMode = automatic;
 

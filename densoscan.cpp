@@ -4,6 +4,7 @@
 #include <QStandardPaths>
 #include <QFileDialog>
 #include <QPainter>
+
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgcodecs.hpp>
 
@@ -29,8 +30,6 @@ typedef unsigned short pixel;
 
 #define OPT_UNAVAILABLE "Unavailable"
 #define OPT_UNCHANGED   "Unchanged"
-
-int outputDPIs [] = { 600, 1200, 2400, 3200, 4800, 6400 };
 
 inline QImage  cvMatToQImage( const cv::Mat &inMat )
 {
@@ -145,6 +144,7 @@ void DensoScan::loadDeviceSettings()
         ui->outputType->setCurrentIndex( settings.value("outputType").toInt() );
 
     ui->comboOutputDPI->setCurrentText( settings.value("outputDPI").toString() );
+    ui->comboDetectionMode->setCurrentText( settings.value("detectionMode").toString() );
 
     settings.endGroup();
 }
@@ -163,6 +163,7 @@ void DensoScan::saveDeviceSettings()
         settings.setValue( "outputType", ui->outputType->currentIndex() );
 
     settings.setValue( "outputDPI", ui->comboOutputDPI->currentText() );
+    settings.setValue( "detectionMode", ui->comboDetectionMode->currentIndex() );
 
     settings.endGroup();
 }
@@ -437,6 +438,7 @@ void DensoScan::enableOptions ( bool enabled  )
     ui->comboDPI->setEnabled(enabled);
     ui->comboOutputDPI->setEnabled(enabled);
     ui->startingIndex->setEnabled(enabled);
+    ui->comboDetectionMode->setEnabled(enabled);
 
     ui->pushScan->setEnabled( enabled );
     ui->pushOptions->setEnabled( enabled );
@@ -515,6 +517,8 @@ int prv = 0;
 
 void DensoScan::on_pushScan_clicked()
 {
+    cancelling = false;
+
     QSettings settings("denso", "scan" );
     settings.beginGroup("main");
     settings.setValue( "device", ui->comboDevice->currentText() );
@@ -525,6 +529,8 @@ void DensoScan::on_pushScan_clicked()
     saveDeviceSettings();
 
     enableOptions ( false );
+    scanner.setDetectionMode ( (DetectionMode) ui->comboDetectionMode->currentIndex() );
+
     preview = Mat ();
     drawPreview();
 
@@ -535,6 +541,7 @@ void DensoScan::on_pushScan_clicked()
 void DensoScan::on_pushCancel_clicked()
 {
     scanner.cancel();
+    cancelling = true;
 //    ui->pushCancel->setEnabled(false);
     onProgressUpdate( "Aborting...", 100 );
 }
@@ -545,6 +552,13 @@ void DensoScan::onScanCompleted ()
         threads[i].join();
 
     threads.clear();
+
+    if ( !cancelling )
+    {
+        player.setMedia(QUrl("qrc:/sound/ding.mp3"));
+        player.play();
+    }
+
     enableOptions( true );
 }
 
@@ -571,6 +585,12 @@ bool file_exist (const std::string& name) {
 
 void DensoScan::onPreviewCompleted ( const Scan &preview )
 {
+    if ( cancelling )
+    {
+        onScanCompleted();
+        return;
+    }
+
     if ( preview.empty() )
     {
         ui->pushCancel->setEnabled( false );
@@ -792,14 +812,9 @@ void DensoScan::on_comboDPI_currentTextChanged(const QString &arg1)
 
     ui->comboOutputDPI->clear();
     ui->comboOutputDPI->addItem( OPT_UNCHANGED );
-    ui->comboOutputDPI->setEnabled(false);
 
-    for ( unsigned i = 0; i < sizeof ( outputDPIs ) / sizeof (int); i++ )
-        if ( outputDPIs[i] < currentDPI )
-        {
-           ui->comboOutputDPI->addItem( QString::number( outputDPIs[i] ) );
-           ui->comboOutputDPI->setEnabled(true);
-        }
+    for ( unsigned i = 0; i < 3; i++ )
+           ui->comboOutputDPI->addItem( QString::number( currentDPI / ( pow ( 2, ( i + 1 ) ) ) ) );
 
     ui->comboOutputDPI->setCurrentText( QString::number( currentOutputDPI ) );
 }

@@ -3,5 +3,6 @@
         <file>icon/icon.ico</file>
         <file>icon/icon.png</file>
         <file>icon/options.png</file>
+        <file>sound/ding.mp3</file>
     </qresource>
 </RCC>

@@ -9,6 +9,7 @@
 #include <QEvent>
 #include <QtCharts>
 #include <QLineSeries>
+#include <QMediaPlayer>
 
 #include "scanner.h"
 
@@ -156,6 +157,10 @@ class DensoScan : public QMainWindow
 
     std::vector<std::string> filenames;
     std::vector <std::thread> threads;
+
+    QMediaPlayer player;
+
+    bool cancelling = false;
 
 private:
   static DensoScan* instance;
