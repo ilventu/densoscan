@@ -11,6 +11,10 @@ using namespace cv;
 
 SANE_Int version_code = 0;
 
+#define CROP_X100   12.5
+#define DMAX        4.8
+#define LMAX        65535.0
+
 std::vector <ScannerDevice> getDevices ()
 {
     SANE_Status ret;
@@ -1218,129 +1222,186 @@ vector<Box> Scanner::guessFrames ( const Scan &preview, const vector<Slot> &hold
     return ret;
 }
 
-
-#define LMAX        65535.0
-#define LUT_SIZE    (LMAX + 1)
-typedef unsigned short pixel;
-
-vector<pixel> getCalibLUT( Profile profile )
-{
-    vector<pixel> LUT(LUT_SIZE, 0);
-
-    tk::spline s( profile.measured, profile.expected, tk::spline::cspline );
-    double l, le;
-    for (int i = 0; i < LUT_SIZE; ++i)
-    {
-        l = i / LMAX * 100;
-        le = s ( l ) / 100;
-        if (le < 0)
-            le = 0;
-
-        if ( le > 1 )
-            le = 1;
-
-        LUT[i] = le * LMAX;
-    }
-
-    return LUT;
-}
-
-vector<pixel> getNormLUT(pixel minValue, pixel maxValue)
-{
-    vector<pixel> LUT(LUT_SIZE, 0);
-
-    double C = 1;
-    if ( maxValue > minValue )
-        C = LMAX / ( maxValue - minValue );
-
-    for (int i = 0; i < LUT_SIZE; ++i)
-    {
-        if ( i > minValue && i <= maxValue )
-            LUT[i] = round( (i - minValue) * C);
-        else if ( i > maxValue )
-            LUT[i] = LMAX;
-        else
-            LUT[i] = 0;
-    }
-
-    return LUT;
-}
-
-vector<pixel> getDefLUT( )
-{
-    vector<pixel> LUT(LUT_SIZE, 0);
-
-    for (int i = 0; i < LUT_SIZE; ++i)
-        LUT[i] = i;
-
-    return LUT;
-}
-
-vector<pixel> getInvLUT( vector<pixel> &in )
-{
-    vector<pixel> LUT(LUT_SIZE, 0);
-
-    for (int i = 0; i < LUT_SIZE; ++i)
-        LUT[i] = LMAX - in[i];
-
-    return LUT;
-}
-
-vector<pixel> getDensityLUT( vector<pixel> &in )
-{
-  vector<pixel> LUT(LUT_SIZE, 0);
-
-  for (int i = 0; i < LUT_SIZE; ++i)
-  {
-      if ( in[i] )
-           LUT[i] = log10( LMAX / in[i] ) * 10000;
-      else
-           LUT[i] = LMAX;
-  }
-
-  return LUT;
-}
-
-vector<pixel> getLogLUT( vector<pixel> &in )
-{
-    double C = LMAX / log10( LUT_SIZE );
-
-    vector<pixel> LUT(LUT_SIZE, 0);
-
-    for (int i = 0; i < LUT_SIZE; ++i)
-        if ( in[i])
-            LUT[i] = round(C * log10( LMAX / in[i] ));
-        else
-            LUT[i] = LMAX;
-
-    return LUT;
-}
-
-vector<pixel> getGammaLUT(vector<pixel> &in, double gamma)
-{
-  vector<pixel> LUT(LUT_SIZE, 0);
-
-  for (int i = 0; i < LUT_SIZE; ++i)
-      LUT[i] = LMAX * pow ( in[i] / LMAX, 1 / gamma );
-
-  return LUT;
-}
-
-void processImage(Mat& I, vector<pixel> LUT )
-{
-  pixel pos, neg;
-  for (int i = 0; i < I.rows; ++i)
-  {
-    for (int j = 0; j < I.cols; ++j)
-    {
-      pos = I.at<pixel>(i, j);
-      neg = LUT[pos];
-      I.at<pixel>(i, j) = neg;
-    }
-  }
-}
-
 void Scanner::doprocess ( Frame &frame, int frameNumber )
+{
+    double sigma = scanDPI / 2000.0, amount = 0.5;
+
+    if ( outputMode == RAW )
+    {
+        Scan image = frame.scan();
+        onNewScan ( image, frameNumber );
+        return;
+    }
+
+    Scan image = frame.scan();
+
+    if ( scanner_debug & DEBUG_RAWSCAN )
+        imwrite ( fmt::format ( "{}-debug-1-scan.png", frameNumber), frame.scan() );
+
+    Mat output;
+    if ( scanner_debug & DEBUG_PROCESSCROP)
+    {
+        Mat img8;
+        image.convertTo(img8, CV_8UC1, 1. / 256.);
+        cv::cvtColor( img8, output, cv::COLOR_GRAY2RGB);
+    }
+
+    image.convertTo(image, CV_64F);
+
+    /*////////////////////////////////////////
+    *
+    * Density values
+    *
+    */
+
+    bool bProfile = profile.expected.size();
+    tk::spline s;
+    if ( bProfile )
+        s = tk::spline ( profile.measured, profile.expected, tk::spline::cspline );
+
+    double l, d;
+    for (int i = 0; i < image.rows; ++i)
+        for (int j = 0; j < image.cols; ++j)
+        {
+            l = image.at<double>(i, j) / LMAX * 100;
+
+            if ( bProfile )
+                l = s ( l );
+
+            if (l < 0)
+                l = 0;
+
+            if ( l > 100 )
+                l = 100;
+
+            if ( l )
+                d = log10 ( 100 / l );
+            else
+                d = DMAX;
+
+            image.at<double>(i, j) = d;
+        }
+
+    if ( scanner_debug & DEBUG_RAWSCAN)
+    {
+        Mat dst;
+        image.convertTo(dst, CV_16UC1, LMAX / log10 ( LMAX ) );
+        imwrite ( fmt::format ( "{}-debug-2-log10.png", frameNumber ),  dst );
+    }
+
+    /*////////////////////////////////////////
+    *
+    * Crop & resize to get min & max
+    *
+    */
+
+    double minVal, maxVal, factor;
+    if ( outputMode == ENDBV )
+    {
+//        Scan image = frame.scan();
+        double ppmmw = image.ppmmw;
+        double ppmmh = image.ppmmh;
+        int w = image.size().width;
+        int h = image.size().height;
+
+        int targetw_px = round ( frame.targetw_mm * ppmmw );
+        int targeth_px = round ( frame.targeth_mm * ppmmh );
+        int crop_x100_px = round ( CROP_X100 / 100 * std::min( frame.targetw_mm, frame.targeth_mm) * ppmmh ); // TODO: resize image
+
+        int cropw = targetw_px - crop_x100_px;
+        int croph = targeth_px - crop_x100_px;
+
+        Point center ( w / 2, h / 2);
+        Rect crop ( center.x - cropw / 2, center.y - croph / 2, cropw, croph );
+        // Min/Max avg 1/10
+        Mat dst;
+        double crop_factor = 1000.0 / std::max( w, h ); //0.25;
+        resize( image(crop), dst, cv::Size(), crop_factor, crop_factor, cv::INTER_AREA );
+
+        if ( scanner_debug & DEBUG_PROCESSCROP)
+        {
+            int dbg_line = sigma * 16;
+            double dbg_scale = 540.0 / std::min ( w, h );
+            cv::Scalar dbg_color ( 52, 167, 252 );
+            cv::line(output, Point ( 0, crop.y + crop.height ), Point ( w, crop.y + crop.height ), dbg_color, dbg_line );
+            cv::line(output, Point ( crop.x, 0 ), Point ( crop.x, h ), dbg_color, dbg_line );
+            cv::line(output, Point ( crop.x + crop.width, 0 ), Point ( crop.x + crop.width, h ), dbg_color, dbg_line );
+            cv::line(output, Point ( 0, crop.y ), Point ( w, crop.y ), dbg_color, dbg_line );
+
+            if ( frame.targeth_mm > frame.targetw_mm  )
+                rotate ( output, output, ROTATE_90_COUNTERCLOCKWISE);
+            else
+                rotate ( image, image, ROTATE_180);
+
+            cv::resize( output, output, Size (), dbg_scale, dbg_scale, cv::INTER_LINEAR );
+            imwrite ( fmt::format ( "{}-debug-3-crop.png", frameNumber ),  output );
+        }
+
+        minMaxLoc(dst, &minVal, &maxVal);
+
+        if ( scanner_debug & DEBUG_PROCESSCROP )
+        {
+            dst.convertTo(dst, CV_16UC1, LMAX / log10 ( LMAX ) );
+            imwrite ( fmt::format ( "{}-debug-4-crop-resize.png", frameNumber ),  dst );
+        }
+
+        factor = LMAX / ( maxVal - minVal );
+    }
+    else
+    {
+        factor = 10000;
+        minVal = 0;
+        maxVal = 6.5;
+    }
+
+    for (int i = 0; i < image.rows; ++i)
+        for (int j = 0; j < image.cols; ++j)
+        {
+            d = image.at<double>(i, j);
+            if ( d > maxVal )
+                d = maxVal;
+            else if ( d < minVal )
+                d = minVal;
+
+            image.at<double>(i, j) = ( d - minVal ) * factor;
+        }
+
+    /*////////////////////////////////////////
+    *
+    * Sharpen image using "unsharp mask" algorithm
+    *
+    */
+
+    if (1)
+    {
+        Mat blurred;
+        GaussianBlur(image, blurred, Size(), sigma, sigma);
+        image.image() = image * ( 1 + amount) + blurred * ( -amount );
+    }
+
+    if ( frame.targeth_mm > frame.targetw_mm  )
+        rotate ( image, image, ROTATE_90_COUNTERCLOCKWISE);
+    else
+        rotate ( image, image, ROTATE_180);
+
+    image.convertTo(image, CV_16UC1);
+
+    //////////////////////////////////////////
+    //
+    // resize
+    //
+    ////
+
+    if ( outputDPI )
+    {
+        double ratio = outputDPI / (double)scanDPI;
+        resize( image, image, Size(), ratio, ratio, INTER_CUBIC );
+    }
+
+    onNewScan ( image, frameNumber );
+}
+
+/* void Scanner::doprocess ( Frame &frame, int frameNumber )
 {
     if ( outputMode == RAW )
     {
@@ -1352,11 +1413,11 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
     if ( scanner_debug & DEBUG_RAWSCAN )
         imwrite ( fmt::format ( "{}-debug-1-scan.png", frameNumber), frame.scan() );
 
-    /*////////////////////////////////////////
-     *
-     * sharpen
-     *
-     */
+    //////////////////////////////////////////
+    //
+    // sharpen
+    //
+    ////
 
     double sigma = scanDPI / 4000.0, threshold = 0, amount = 1.2; //0.6;
 
@@ -1370,11 +1431,11 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
     if ( scanner_debug & DEBUG_RAWSCAN )
         imwrite ( fmt::format ( "{}-debug-1-sharpen.png", frameNumber), frame.scan() );
 
-    /*////////////////////////////////////////
-     *
-     * Parameters
-     *
-     */
+    //////////////////////////////////////////
+    //
+    // Parameters
+    //
+    ////
 
     double crop_x100 = 12.5;
 
@@ -1394,11 +1455,11 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
     int dbg_line = round ( 1 + 0.04 * ppmmh ); // TODO: resize image
     double dbg_scale = 1080.0 / std::min ( w, h );
 
-    /*////////////////////////////////////////
-     *
-     * Check and convert image
-     *
-     */
+    //////////////////////////////////////////
+    //
+    // Check and convert image
+    //
+    ////
 
     Mat output;
     if ( scanner_debug & DEBUG_PROCESSCROP)
@@ -1411,11 +1472,11 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
     Point center ( w / 2, h / 2);
     Rect crop ( center.x - cropw_px / 2, center.y - croph_px / 2, cropw_px, croph_px );
 
-    /*////////////////////////////////////////
-     *
-     * process
-     *
-     */
+    //////////////////////////////////////////
+    //
+    // process
+    //
+    ////
 
     vector<pixel> LUT, LUT1;
     double minVal, maxVal;
@@ -1463,11 +1524,11 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
     else
         rotate ( image, image, ROTATE_180);
 
-    /*////////////////////////////////////////
-     *
-     * resize
-     *
-     */
+    //////////////////////////////////////////
+    //
+    // resize
+    //
+    ////
 
     if ( outputDPI )
     {
@@ -1477,6 +1538,7 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
 
     onNewScan ( image, frameNumber );
 }
+*/
 
 double get_mode ( vector<double> size, double approx )
 {

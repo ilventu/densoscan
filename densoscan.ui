@@ -354,6 +354,9 @@
          <layout class="QHBoxLayout" name="horizontalLayout_10">
           <item>
            <widget class="QCheckBox" name="checkBox">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
             <property name="text">
              <string/>
             </property>
