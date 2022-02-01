@@ -22,8 +22,6 @@ using namespace std;
 #include "options.h"
 
 #define LMAX        65535.0
-#define LUT_SIZE    (LMAX + 1)
-typedef unsigned short pixel;
 
 #define TYPE_FRAME 1
 #define TYPE_SPACE 0

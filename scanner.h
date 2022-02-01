@@ -117,6 +117,8 @@ public:
     double ppmmw = 0;
     double ppmmh = 0;
 
+    cv::Mat &image () { return *this; }
+
 public:
     Scan ( int height, int width, int type, double ppmmw, double ppmmh ) : cv::Mat ( height, width, type )
     {
