@@ -162,6 +162,12 @@ void DensoScan::loadDeviceSettings()
     ui->comboInterpolation->setCurrentText( settings.value("interpolation", "Area").toString() );
     ui->comboDetectionMode->setCurrentText( settings.value("detectionMode").toString() );
 
+    ui->checkBatch->setCheckState( (Qt::CheckState)  settings.value("batch").toInt() );
+    ui->comboBatch->setCurrentText( settings.value("batchNumber").toString() );
+
+    settings.setValue( "batch", ui->checkBatch->isChecked() );
+    settings.setValue( "batchNumber", ui->comboBatch->currentText() );
+
     settings.endGroup();
 }
 
@@ -181,6 +187,9 @@ void DensoScan::saveDeviceSettings()
     settings.setValue( "outputDPI", ui->comboOutputDPI->currentText() );
     settings.setValue( "interpolation", ui->comboInterpolation->currentText() );
     settings.setValue( "detectionMode", ui->comboDetectionMode->currentText() );
+
+    settings.setValue( "batch", ui->checkBatch->checkState() );
+    settings.setValue( "batchNumber", ui->comboBatch->currentText() );
 
     settings.endGroup();
 }
@@ -305,9 +314,10 @@ void DensoScan::enableBatch( int enabled )
     if ( enabled )
         enabled = ui->comboDetectionMode->currentIndex() > autoFullStrip;
 
-    ui->comboBatch->setEnabled(enabled);
     ui->labelBatch->setEnabled(enabled);
     ui->checkBatch->setEnabled(enabled);
+
+    ui->comboBatch->setEnabled(ui->checkBatch->isChecked());
 }
 
 void DensoScan::drawPreview()
@@ -879,6 +889,7 @@ void DensoScan::on_comboDPI_currentTextChanged(const QString &arg1)
                ui->comboOutputDPI->addItem( QString::number( i ) );
 
     ui->comboOutputDPI->setCurrentText( QString::number( currentOutputDPI ) );
+    generateCalibrationFilename();
 }
 
 
@@ -894,5 +905,34 @@ void DensoScan::on_comboOutputDPI_currentIndexChanged(int index)
 void DensoScan::on_comboDetectionMode_currentIndexChanged(int index)
 {
     enableBatch(true);
+    generateCalibrationFilename();
+}
+
+
+void DensoScan::on_checkBatch_stateChanged(int arg1)
+{
+    ui->comboBatch->setEnabled(arg1);
+}
+
+void DensoScan::generateCalibrationFilename()
+{
+    if ( ui->comboDetectionMode->currentIndex() == stoufferT2115 )
+    {
+        ui->rollName->setText( QString ( fmt::format ( "{} {} {} +{}.png", ui->comboDetectionMode->currentText().toStdString(),
+                                          ui->comboDPI->currentText().toStdString(),
+                                          ui->comboType->currentText().toStdString(),
+                                          ui->brightness->value() ).c_str()  ) );
+    }
+}
+
+void DensoScan::on_comboType_currentTextChanged(const QString &arg1)
+{
+    generateCalibrationFilename();
+}
+
+
+void DensoScan::on_brightness_valueChanged(int arg1)
+{
+    generateCalibrationFilename();
 }
 

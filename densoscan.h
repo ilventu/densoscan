@@ -187,6 +187,7 @@ public:
     void updateDeviceOptions();
 
     void enableBatch ( int enabled );
+    void generateCalibrationFilename (  );
 
     void drawPreview ();
 
@@ -228,6 +229,12 @@ private slots:
     void on_comboOutputDPI_currentIndexChanged(int index);
 
     void on_comboDetectionMode_currentIndexChanged(int index);
+
+    void on_checkBatch_stateChanged(int arg1);
+
+    void on_comboType_currentTextChanged(const QString &arg1);
+
+    void on_brightness_valueChanged(int arg1);
 
 private:
     Ui::DensoScan *ui;
