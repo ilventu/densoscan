@@ -565,7 +565,7 @@ void DensoScan::on_pushScan_clicked()
 
     unsigned int batch = 1;
     if ( ui->checkBatch->isChecked() )
-        batch = ui->comboBatch->currentData().Int;
+        batch = ui->comboBatch->currentText().toInt();
     scanner.setBatchScan(batch);
 
     QSettings settings("denso", "scan" );
