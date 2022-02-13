@@ -186,6 +186,8 @@ public:
     void enableOptions ( bool enabled );
     void updateDeviceOptions();
 
+    void enableBatch ( int enabled );
+
     void drawPreview ();
 
     QChartView *chartView = nullptr;
@@ -199,6 +201,8 @@ protected:
     void onPreviewCompleted ( const Scan &preview );
     void onProgressUpdate ( const std::string text, int percent );
     void onError ( const std::string &error );
+
+    void doScan ( const std::vector<Box> &frames = {} );
 
     void resizeEvent(QResizeEvent*evt);
 
@@ -220,6 +224,10 @@ private slots:
     void on_pushOptions_clicked();
 
     void on_comboDPI_currentTextChanged(const QString &arg1);
+
+    void on_comboOutputDPI_currentIndexChanged(int index);
+
+    void on_comboDetectionMode_currentIndexChanged(int index);
 
 private:
     Ui::DensoScan *ui;

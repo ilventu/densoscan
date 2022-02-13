@@ -379,133 +379,151 @@ void Scanner::setBrightness(int level)
 
 void Scanner::doscan ( std::vector <Box> boxes )
 {
-    std::vector <Frame> frames;
-
-    unsigned int nboxes;
-    double ymin = 0, ymax = 0;
-
-    for ( nboxes = 0; nboxes < boxes.size(); nboxes++ )
+    if ( !boxes.size() )
     {
-        if ( !ymin || ymin > boxes[nboxes].y )
-            ymin = boxes[nboxes].y;
-
-        if ( ymax < ( boxes[nboxes].y + boxes[nboxes].height ) )
-            ymax = boxes[nboxes].y + boxes[nboxes].height;
+        if ( detectionMode == stoufferT2115 )
+            boxes.push_back( Box ( cv::Rect2d ( 55, 16, 40, 180 ) ) );
+        else
+            boxes.push_back( Box ( cv::Rect2d ( optGetMinD(SCAN_TLX), optGetMinD(SCAN_TLY), optGetMaxD(SCAN_BRX), optGetMaxD(SCAN_BRY) ) ) );
     }
 
-    ymin -= 5;
-    ymax += 1;
-
-    try
+    for ( int b = 0; b < batchScan; b++ )
     {
-        if ( optExist( SCAN_SOURCE ) )
-            if ( isInDomain( SCAN_SOURCE, "Transparency Unit" ) )
-                optSet ( SCAN_SOURCE, "Transparency Unit" );
+        std::vector <Frame> frames;
 
-        if ( scanFilmType != "" )
-            optSet ( SCAN_FILM_TYPE, scanFilmType.c_str() );
+        unsigned int nboxes;
+        double ymin = 0, ymax = 0;
 
-        optSet ( SCAN_MODE, "Gray" );
-
-        optSet ( SCAN_DEPTH, 16 );
-        optSet ( SCAN_PREVIEW, false );
-
-        if ( optExist( SCAN_DPI ) )
-            optSet ( SCAN_DPI, scanDPI );
-
-        if ( optExist( "x-resolution" ) )
+        for ( nboxes = 0; nboxes < boxes.size(); nboxes++ )
         {
-            optSet ( "x-resolution", scanDPI );
-            optSet ( "y-resolution", scanDPI );
+            if ( !ymin || ymin > boxes[nboxes].y )
+                ymin = boxes[nboxes].y;
+
+            if ( ymax < ( boxes[nboxes].y + boxes[nboxes].height ) )
+                ymax = boxes[nboxes].y + boxes[nboxes].height;
         }
 
-        optSet ( SCAN_SHARP, 2 );
+        ymin -= 5;
+        ymax += 1;
 
-        optSet ( "brightness", brightness );
-
-        if ( !skipBegining )
-            ymin = optGetMinD(SCAN_TLY);
-
-        optSet ( SCAN_TLY, (double)ymin );
-        optSet ( SCAN_BRY, (double)ymax );
-        optSet ( SCAN_TLX, optGetMinD(SCAN_TLX) );
-        optSet ( SCAN_BRX, optGetMaxD(SCAN_BRX) );
-
-        int width, height;
-
-        onProgressUpdate ( "Starting...", 0 );
-        start ( &width, &height );
-
-//        double ppmm = getPpmm();
-        double lw = optGetD(SCAN_BRX) - optGetD(SCAN_TLX);
-        double ppmmw = width / lw;
-
-        double lh = optGetD(SCAN_BRY) - optGetD(SCAN_TLY);
-        double ppmmh = height / lh;
-
-        if ( scanner_debug )
+        try
         {
-            cout << "scan lw: " << lw << " ppmmw: " << ppmmh << endl;
-            cout << "scan lh: " << lh << " ppmmh: " << ppmmw << endl;
-        }
+            if ( optExist( SCAN_SOURCE ) )
+                if ( isInDomain( SCAN_SOURCE, "Transparency Unit" ) )
+                    optSet ( SCAN_SOURCE, "Transparency Unit" );
 
-        for ( unsigned i = 0; i < boxes.size(); i++ )
-        {
-            frames.push_back( Frame ( boxes[i], ppmmw, ppmmh ) );
+            if ( scanFilmType != "" )
+                optSet ( SCAN_FILM_TYPE, scanFilmType.c_str() );
+
+            optSet ( SCAN_MODE, "Gray" );
+
+            optSet ( SCAN_DEPTH, 16 );
+            optSet ( SCAN_PREVIEW, false );
+
+            if ( optExist( SCAN_DPI ) )
+                optSet ( SCAN_DPI, scanDPI );
+
+            if ( optExist( "x-resolution" ) )
+            {
+                optSet ( "x-resolution", scanDPI );
+                optSet ( "y-resolution", scanDPI );
+            }
+
+            optSet ( SCAN_SHARP, 2 );
+
+            optSet ( "brightness", brightness );
+
+            if ( !skipBegining )
+                ymin = optGetMinD(SCAN_TLY);
+
+            optSet ( SCAN_TLY, (double)ymin );
+            optSet ( SCAN_BRY, (double)ymax );
+            optSet ( SCAN_TLX, optGetMinD(SCAN_TLX) );
+            optSet ( SCAN_BRX, optGetMaxD(SCAN_BRX) );
+
+            int width, height;
+
+            onProgressUpdate ( "Starting...", 0 );
+            start ( &width, &height );
+
+    //        double ppmm = getPpmm();
+            double lw = optGetD(SCAN_BRX) - optGetD(SCAN_TLX);
+            double ppmmw = width / lw;
+
+            double lh = optGetD(SCAN_BRY) - optGetD(SCAN_TLY);
+            double ppmmh = height / lh;
+
             if ( scanner_debug )
             {
-                Frame frame ( boxes[i], ppmmw, ppmmh );
-                cout << frames.size() << ": ";
-                cout << frame.x / ppmmw << ", ";
-                cout << frame.y / ppmmh << ", ";
-                cout << frame.width / ppmmw << ", ";
-                cout << frame.height / ppmmh << endl;
+                cout << "scan lw: " << lw << " ppmmw: " << ppmmh << endl;
+                cout << "scan lh: " << lh << " ppmmh: " << ppmmw << endl;
             }
-        }
 
-        int n = 0;
-
-        time_t lastTime = time(NULL);
-
-        nCurrentLine = ymin * ppmmh;
-        while ( read() )
-        {
-            for ( unsigned int i = 0; i < frames.size(); i++ )
+            for ( unsigned i = 0; i < boxes.size(); i++ )
             {
-                if ( frames[i].isinto( nCurrentLine ) )
-                    frames[i].addline( pScanBuffer );
-                if ( frames[i].iscomplete( nCurrentLine ) )
+                frames.push_back( Frame ( boxes[i], ppmmw, ppmmh ) );
+                if ( scanner_debug )
                 {
-                    frames[i].running = true;
-                    Frame *f = &(frames[i]);
-                    Scanner *t = this;
-                    threads.push_back ( std::thread ( [ t, f, i ] () { t->doprocess( *f, i ); } ) );
+                    Frame frame ( boxes[i], ppmmw, ppmmh );
+                    cout << frames.size() << ": ";
+                    cout << frame.x / ppmmw << ", ";
+                    cout << frame.y / ppmmh << ", ";
+                    cout << frame.width / ppmmw << ", ";
+                    cout << frame.height / ppmmh << endl;
                 }
             }
 
-            n++;
+            int n = 0;
 
-            if ( lastTime != time(NULL) )
+            time_t lastTime = time(NULL);
+
+            nCurrentLine = ymin * ppmmh;
+            while ( read() )
             {
-                onProgressUpdate ( "Scanning...", (double)n / height * 100 );
-                lastTime = time(NULL);
+                for ( unsigned int i = 0; i < frames.size(); i++ )
+                {
+                    if ( frames[i].isinto( nCurrentLine ) )
+                        frames[i].addline( pScanBuffer );
+                    if ( frames[i].iscomplete( nCurrentLine ) )
+                    {
+                        frames[i].running = true;
+                        Frame *f = &(frames[i]);
+                        Scanner *t = this;
+                        int frame = i + (frames.size() * b);
+                        threads.push_back ( std::thread ( [ t, f, frame ] () { t->doprocess( *f, frame ); } ) );
+                    }
+                }
+
+                n++;
+
+                if ( lastTime != time(NULL) )
+                {
+                    string s;
+                    if ( batchScan == 1 )
+                        s = "Scanning...";
+                    else
+                        s = fmt::format ( "Scanning {}/{}...", b + 1, batchScan );
+
+                    onProgressUpdate ( s, (double)n / height * 100 );
+                    lastTime = time(NULL);
+                }
+
+                nCurrentLine++;
             }
-
-            nCurrentLine++;
         }
-    }
-    catch ( std::runtime_error error )
-    {
-        cancel();
-        onError ( error.what() );
-        onPreviewCompleted( Scan () );
-    }
+        catch ( std::runtime_error error )
+        {
+            cancel();
+            onError ( error.what() );
+            onPreviewCompleted( Scan () );
+        }
 
-    for ( unsigned int i = 0; i < threads.size(); i++)
-        threads[i].join();
+        for ( unsigned int i = 0; i < threads.size(); i++)
+            threads[i].join();
 
-    frames.clear();
-    threads.clear();
+        frames.clear();
+        threads.clear();
+    }
 
     onProgressUpdate ( "Done.", 100 );
     onScanCompleted ();
@@ -590,7 +608,7 @@ void Scanner::dumpopts ()
 
 void Scanner::scan ( std::vector <Box> boxes )
 {
-    if ( boxes.size() )
+    if ( boxes.size() || detectionMode > autoFullStrip )
     {
         Scanner *s = this;
         new std::thread ( [ s, boxes ] () { s->doscan(boxes); } );
@@ -720,7 +738,7 @@ vector <Slot> Scanner::guessSlots ( const Scan &preview )
     vector <Slot> slots;
 
     // since your image has compression artifacts, we have to threshold the image
-    int threshold = 16;
+    int threshold = 10;
     cv::Mat mask = preview > threshold;
 
     // extract contours
@@ -850,6 +868,19 @@ void Scanner::setDPI(int dpi)
 void Scanner::setOutputDPI(int dpi)
 {
     outputDPI = dpi;
+}
+
+void Scanner::setInterpolation(cv::InterpolationFlags i)
+{
+    interpol = i;
+}
+
+void Scanner::setBatchScan(int n)
+{
+    if ( n > 0 )
+        batchScan = n;
+    else
+        batchScan = 1;
 }
 
 void Scanner::setPreviewDPI(int dpi)
@@ -1224,11 +1255,17 @@ vector<Box> Scanner::guessFrames ( const Scan &preview, const vector<Slot> &hold
 
 void Scanner::doprocess ( Frame &frame, int frameNumber )
 {
-    double sigma = scanDPI / 2000.0, amount = 0.5;
+    double sigma = scanDPI / 2000.0, amount = 0.6;
 
     if ( outputMode == RAW )
     {
         Scan image = frame.scan();
+        if ( outputDPI )
+        {
+            double ratio = outputDPI / (double)scanDPI;
+            resize( image, image, Size(), ratio, ratio, interpol );
+        }
+
         onNewScan ( image, frameNumber );
         return;
     }
@@ -1246,7 +1283,7 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
         cv::cvtColor( img8, output, cv::COLOR_GRAY2RGB);
     }
 
-    image.convertTo(image, CV_64F);
+    image.convertTo(image, CV_32FC1);
 
     /*////////////////////////////////////////
     *
@@ -1263,7 +1300,7 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
     for (int i = 0; i < image.rows; ++i)
         for (int j = 0; j < image.cols; ++j)
         {
-            l = image.at<double>(i, j) / LMAX * 100;
+            l = image.at<float>(i, j) / LMAX * 100;
 
             if ( bProfile )
                 l = s ( l );
@@ -1279,7 +1316,7 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
             else
                 d = DMAX;
 
-            image.at<double>(i, j) = d;
+            image.at<float>(i, j) = d;
         }
 
     if ( scanner_debug & DEBUG_RAWSCAN)
@@ -1316,7 +1353,7 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
         // Min/Max avg 1/10
         Mat dst;
         double crop_factor = 1000.0 / std::max( w, h ); //0.25;
-        resize( image(crop), dst, cv::Size(), crop_factor, crop_factor, cv::INTER_AREA );
+        resize( image(crop), dst, cv::Size(), crop_factor, crop_factor, interpol );
 
         if ( scanner_debug & DEBUG_PROCESSCROP)
         {
@@ -1333,7 +1370,7 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
             else
                 rotate ( image, image, ROTATE_180);
 
-            cv::resize( output, output, Size (), dbg_scale, dbg_scale, cv::INTER_LINEAR );
+            cv::resize( output, output, Size (), dbg_scale, dbg_scale, cv::INTER_CUBIC );
             imwrite ( fmt::format ( "{}-debug-3-crop.png", frameNumber ),  output );
         }
 
@@ -1357,13 +1394,13 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
     for (int i = 0; i < image.rows; ++i)
         for (int j = 0; j < image.cols; ++j)
         {
-            d = image.at<double>(i, j);
+            d = image.at<float>(i, j);
             if ( d > maxVal )
                 d = maxVal;
             else if ( d < minVal )
                 d = minVal;
 
-            image.at<double>(i, j) = ( d - minVal ) * factor;
+            image.at<float>(i, j) = ( d - minVal ) * factor;
         }
 
     /*////////////////////////////////////////
@@ -1384,8 +1421,6 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
     else
         rotate ( image, image, ROTATE_180);
 
-    image.convertTo(image, CV_16UC1);
-
     //////////////////////////////////////////
     //
     // resize
@@ -1395,9 +1430,10 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
     if ( outputDPI )
     {
         double ratio = outputDPI / (double)scanDPI;
-        resize( image, image, Size(), ratio, ratio, INTER_CUBIC );
+        resize( image, image, Size(), ratio, ratio, INTER_LINEAR );
     }
 
+    image.convertTo(image, CV_16UC1);
     onNewScan ( image, frameNumber );
 }
 

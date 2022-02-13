@@ -153,6 +153,13 @@ public:
         targeth_mm = s.frameH;
         targetw_mm = s.frameW;
     }
+
+    Box ( cv::Rect2d in ) : cv::Rect2d (in)
+    {
+        targeth_mm = in.height;
+        targetw_mm = in.width;
+    }
+
 };
 
 class Frame : public cv::Rect
@@ -207,10 +214,10 @@ public:
         if ( running )
             return false;
         else
-            return current_line && ( line > ( y + height ) );
+            return current_line && ( line >= ( y + height ) );
     }
 
-    void addline ( const unsigned char *buffer )
+    virtual void addline ( const unsigned char *buffer )
     {
         if ( !current_line )
         {
@@ -233,6 +240,20 @@ public:
     }
 };
 
+class FullFrame : public Frame
+{
+    int fromDPI;
+    int toDPI;
+
+public:
+    FullFrame ( Box &rectmm, double ppmmw, double ppmmh, int fromDPI, int toDPI ) : Frame ( rectmm, ppmmw, ppmmh )
+    {
+        this->fromDPI = fromDPI;
+        this->toDPI = toDPI;
+    }
+
+};
+
 typedef struct
 {
     std::string name;	/* unique device name */
@@ -247,7 +268,9 @@ std::vector <ScannerDevice> getDevices ();
 typedef enum
 {
     automatic = 0,
-    autoFullStrip
+    autoFullStrip,
+    fullScanArea,
+    stoufferT2115
 }
 DetectionMode;
 
@@ -286,6 +309,8 @@ private:
     std::string scanFilmType;
     int scanDPI = 4800;
     int outputDPI = 0;
+    cv::InterpolationFlags interpol = cv::INTER_CUBIC;
+    int batchScan = 1;
     int previewDPI = 150;
     OutputMode outputMode = UENDBV;
     int brightness = 0;
@@ -376,6 +401,9 @@ public:
     // Parameters
     void setDPI ( int dpi );
     void setOutputDPI ( int dpi );
+    void setInterpolation ( cv::InterpolationFlags i );
+    void setBatchScan ( int n );
+
     void setDetectionMode ( DetectionMode m );
     void setPreviewDPI ( int dpi );
     int getPreviewDPI (  );

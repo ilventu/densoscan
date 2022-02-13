@@ -29,6 +29,23 @@ using namespace std;
 #define OPT_UNAVAILABLE "Unavailable"
 #define OPT_UNCHANGED   "Unchanged"
 
+bool file_exist (const std::string& name) {
+    struct stat buffer;
+    return (stat (name.c_str(), &buffer) == 0);
+}
+
+auto framenumber = [] ( int offset )
+{
+    if ( offset == -3 )
+        return std::string("XX");
+    if ( offset == -2 )
+        return std::string("X");
+    if ( offset == -1 )
+        return std::string("00");
+
+    return fmt::format ( "{}", offset );
+};
+
 inline QImage  cvMatToQImage( const cv::Mat &inMat )
 {
    switch ( inMat.type() )
@@ -142,6 +159,7 @@ void DensoScan::loadDeviceSettings()
         ui->outputType->setCurrentIndex( settings.value("outputType").toInt() );
 
     ui->comboOutputDPI->setCurrentText( settings.value("outputDPI").toString() );
+    ui->comboInterpolation->setCurrentText( settings.value("interpolation", "Area").toString() );
     ui->comboDetectionMode->setCurrentText( settings.value("detectionMode").toString() );
 
     settings.endGroup();
@@ -161,7 +179,8 @@ void DensoScan::saveDeviceSettings()
         settings.setValue( "outputType", ui->outputType->currentIndex() );
 
     settings.setValue( "outputDPI", ui->comboOutputDPI->currentText() );
-    settings.setValue( "detectionMode", ui->comboDetectionMode->currentIndex() );
+    settings.setValue( "interpolation", ui->comboInterpolation->currentText() );
+    settings.setValue( "detectionMode", ui->comboDetectionMode->currentText() );
 
     settings.endGroup();
 }
@@ -253,10 +272,14 @@ void DensoScan::updateDeviceOptions()
         QString current = ui->comboDPI->currentText();
         ui->comboDPI->clear();
         for ( unsigned i = 0; i < DPIs.size(); i++ )
-            ui->comboDPI->addItem( QString::number( DPIs[i] ) );
+            if ( DPIs[i] >= 600  )
+                ui->comboDPI->addItem( QString::number( DPIs[i] ) );
 
         ui->comboDPI->setCurrentText( current );
         ui->comboDPI->setEnabled(true);
+        ui->comboOutputDPI->setEnabled(true);
+        ui->comboInterpolation->setEnabled(ui->comboOutputDPI->currentIndex());
+        ui->labelInterpolation->setEnabled(ui->comboOutputDPI->currentIndex());
     }
     else
     {
@@ -269,9 +292,22 @@ void DensoScan::updateDeviceOptions()
         ui->comboOutputDPI->addItem( OPT_UNAVAILABLE );
         ui->comboOutputDPI->setCurrentText( OPT_UNAVAILABLE );
         ui->comboOutputDPI->setEnabled(false);
+        ui->comboInterpolation->setEnabled(ui->comboOutputDPI->currentIndex());
+        ui->labelInterpolation->setEnabled(ui->comboOutputDPI->currentIndex());
     }
 
    loadDeviceSettings();
+//   enableOptions(true);
+}
+
+void DensoScan::enableBatch( int enabled )
+{
+    if ( enabled )
+        enabled = ui->comboDetectionMode->currentIndex() > autoFullStrip;
+
+    ui->comboBatch->setEnabled(enabled);
+    ui->labelBatch->setEnabled(enabled);
+    ui->checkBatch->setEnabled(enabled);
 }
 
 void DensoScan::drawPreview()
@@ -429,12 +465,14 @@ void DensoScan::enableOptions ( bool enabled  )
     ui->buttonRefresh->setEnabled(enabled);
     ui->brightness->setEnabled(enabled);
     ui->comboProfile->setEnabled(enabled);
+    ui->labelProfile->setEnabled(enabled);
     ui->folderName->setEnabled(enabled);
     ui->toolSelectFolder->setEnabled(enabled);
     ui->rollName->setEnabled(enabled);
     ui->comboType->setEnabled(enabled);
     ui->comboDPI->setEnabled(enabled);
     ui->comboOutputDPI->setEnabled(enabled);
+
     ui->startingIndex->setEnabled(enabled);
     ui->comboDetectionMode->setEnabled(enabled);
 
@@ -447,6 +485,14 @@ void DensoScan::enableOptions ( bool enabled  )
         updateDeviceOptions();
         on_outputType_currentIndexChanged( ui->outputType->currentIndex() );
     }
+
+    enableBatch( enabled );
+
+    if ( enabled )
+        enabled = ui->comboOutputDPI->currentIndex();
+
+    ui->comboInterpolation->setEnabled(enabled);
+    ui->labelInterpolation->setEnabled(enabled);
 }
 
 class PNGWriter
@@ -517,6 +563,11 @@ void DensoScan::on_pushScan_clicked()
 {
     cancelling = false;
 
+    unsigned int batch = 1;
+    if ( ui->checkBatch->isChecked() )
+        batch = ui->comboBatch->currentData().Int;
+    scanner.setBatchScan(batch);
+
     QSettings settings("denso", "scan" );
     settings.beginGroup("main");
     settings.setValue( "device", ui->comboDevice->currentText() );
@@ -532,7 +583,25 @@ void DensoScan::on_pushScan_clicked()
     preview = Mat ();
     drawPreview();
 
-    scanner.preview();
+    if ( (DetectionMode) ui->comboDetectionMode->currentIndex() < fullScanArea )
+        scanner.preview();
+    else
+    {
+        filenames.clear();
+        int offset = 1;
+        std::string name = (ui->folderName->text() + "/" + ui->rollName->text()).toStdString();
+
+        for ( unsigned int f = 0; f < batch; f++ )
+        {
+            while ( file_exist( fmt::format ( "{} ({}).png", name, framenumber(offset) ) ) )
+                offset++;
+
+            filenames.push_back( fmt::format ( "{} ({}).png", name, framenumber(offset) ) );
+            offset++;
+        }
+
+        doScan ();
+    }
 }
 
 
@@ -574,11 +643,6 @@ void DensoScan::resizeEvent(QResizeEvent *evt)
 {
     QMainWindow::resizeEvent(evt);
     drawPreview( );
-}
-
-bool file_exist (const std::string& name) {
-    struct stat buffer;
-    return (stat (name.c_str(), &buffer) == 0);
 }
 
 void DensoScan::onPreviewCompleted ( const Scan &preview )
@@ -623,18 +687,6 @@ void DensoScan::onPreviewCompleted ( const Scan &preview )
 
     std::string name = (ui->folderName->text() + "/" + ui->rollName->text()).toStdString();
 
-    auto framenumber = [] ( int offset )
-    {
-        if ( offset == -3 )
-            return std::string("XX");
-        if ( offset == -2 )
-            return std::string("X");
-        if ( offset == -1 )
-            return std::string("00");
-
-        return fmt::format ( "{}", offset );
-    };
-
     double fontSize = ppmmh / 2;
     int fontTic = round ( ppmmh / 2);
     int rectTic = round ( ppmmh / 3);
@@ -664,12 +716,18 @@ void DensoScan::onPreviewCompleted ( const Scan &preview )
     QPixmap px = QPixmap::fromImage ( imDraw );
     ui->preview->setPixmap ( px ); */
 
+    doScan ( frames );
+}
+
+void DensoScan::doScan ( const vector<Box> &frames )
+{
     Scanner::OutputMode mode = (Scanner::OutputMode)(ui->outputType->currentIndex());
     string filmType = ui->comboType->currentText().toStdString();
     int DPI = ui->comboDPI->currentText().toInt();
     int outputDPI = ui->comboOutputDPI->currentText().toInt();
     int profile = ui->comboProfile->currentIndex() - 1;
     int brightness = ui->brightness->value();
+    cv::InterpolationFlags interpolation = (cv::InterpolationFlags) ui->comboInterpolation->currentIndex();
 
     if ( profile > 0 )
         scanner.setProfile( *(profiles.at(profile)) );
@@ -680,6 +738,7 @@ void DensoScan::onPreviewCompleted ( const Scan &preview )
     scanner.setFilmType( filmType );
     scanner.setDPI( DPI );
     scanner.setOutputDPI( outputDPI );
+    scanner.setInterpolation(interpolation);
     scanner.setBrightness( brightness );
 
     scanner.scan ( frames ); // */
@@ -768,6 +827,8 @@ void DensoScan::on_outputType_currentIndexChanged(int index)
         settings.setValue( "profile", ui->comboProfile->currentText() );
 
         ui->comboProfile->setEnabled(false);
+        ui->labelProfile->setEnabled(false);
+
         ui->comboProfile->clear();
         ui->comboProfile->addItem( OPT_UNAVAILABLE );
         ui->comboProfile->setCurrentText( OPT_UNAVAILABLE );
@@ -775,6 +836,7 @@ void DensoScan::on_outputType_currentIndexChanged(int index)
     else
     {
         ui->comboProfile->setEnabled(true);
+        ui->labelProfile->setEnabled(true);
 
         loadProfiles();
         QSettings settings("denso", "scan" );
@@ -811,9 +873,26 @@ void DensoScan::on_comboDPI_currentTextChanged(const QString &arg1)
     ui->comboOutputDPI->clear();
     ui->comboOutputDPI->addItem( OPT_UNCHANGED );
 
-    for ( unsigned i = 0; i < 3; i++ )
-           ui->comboOutputDPI->addItem( QString::number( currentDPI / ( pow ( 2, ( i + 1 ) ) ) ) );
+    if ( currentDPI > 600 )
+        for ( unsigned i = currentDPI - 1; i >= 600; i-- )
+            if ( currentDPI % i == 0)
+               ui->comboOutputDPI->addItem( QString::number( i ) );
 
     ui->comboOutputDPI->setCurrentText( QString::number( currentOutputDPI ) );
+}
+
+
+void DensoScan::on_comboOutputDPI_currentIndexChanged(int index)
+{
+    if ( ui->comboInterpolation->isVisible() )
+        ui->comboInterpolation->setEnabled(index);
+    if ( ui->labelInterpolation->isVisible() )
+        ui->labelInterpolation->setEnabled(index);
+}
+
+
+void DensoScan::on_comboDetectionMode_currentIndexChanged(int index)
+{
+    enableBatch(true);
 }
 
