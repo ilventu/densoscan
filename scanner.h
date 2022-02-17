@@ -315,6 +315,8 @@ private:
     OutputMode outputMode = UENDBV;
     int brightness = 0;
 
+    bool cancelling = false;
+
 private:
     int optindex ( const char *optname );
     void start ( int *maxx = nullptr, int *maxy = nullptr );
