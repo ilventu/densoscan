@@ -164,6 +164,8 @@ public:
 
 class Frame : public cv::Rect
 {
+public:
+
     double ppmmw = 0;
     double ppmmh = 0;
     int bpp = 2;
@@ -172,7 +174,6 @@ class Frame : public cv::Rect
 
     Scan image;
 
-public:
     double targetw_mm;
     double targeth_mm;
 
@@ -199,10 +200,20 @@ public:
         targeth_mm = rectmm.targeth_mm;
     }
 
-/*    Frame ( const Scan &image )
+
+    Frame ( double ppmmw, double ppmmh, double x, double y, double width, double height, double targetw_mm, double targeth_mm )
     {
-        this->image = image;
-    } */
+        this->x = x;
+        this->y = y;
+        this->width = width;
+        this->height = height;
+
+        this->ppmmw = ppmmw;
+        this->ppmmh = ppmmh;
+
+        this->targetw_mm = targetw_mm;
+        this->targeth_mm = targeth_mm;
+    }
 
     bool isinto ( int line )
     {
@@ -317,7 +328,7 @@ private:
 
     bool cancelling = false;
 
-private:
+protected:
     int optindex ( const char *optname );
     void start ( int *maxx = nullptr, int *maxy = nullptr );
     int read ( );

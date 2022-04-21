@@ -4,6 +4,9 @@
 #include <fmt/format.h>
 #include <png.h>
 
+#include <iostream>
+#include <fstream>
+
 #include <sys/stat.h>
 
 using namespace std;
@@ -1268,9 +1271,12 @@ vector<Box> Scanner::guessFrames ( const Scan &preview, const vector<Slot> &hold
     return ret;
 }
 
+#define PIXEL       float
+#define PIXEL_MAT   CV_32FC1
+
 void Scanner::doprocess ( Frame &frame, int frameNumber )
 {
-    double sigma = scanDPI / 2000.0, amount = 0.6;
+    double sigma = scanDPI / 2000.0, amount = 0.8;
 
     if ( outputMode == RAW )
     {
@@ -1288,7 +1294,14 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
     Scan image = frame.scan();
 
     if ( scanner_debug & DEBUG_RAWSCAN )
+    {
         imwrite ( fmt::format ( "{}-debug-1-scan.png", frameNumber), frame.scan() );
+        ofstream out;
+        out.open (fmt::format ( "{}-debug-1-scan.json", frameNumber));
+        out << fmt::format ( "{{\n\t\"ppmmw\": {},\n\t\"ppmmh\": {},\n\t\"x\": {},\n\t\"y\": {},\n\t\"width\": {},\n\t\"height\": {},\n\t\"targetw\": {},\n\t\"targeth_mm\": {}\n}}", \
+                             frame.ppmmw, frame.ppmmh, frame.x, frame.y, frame.width, frame.height, frame.targetw_mm, frame.targeth_mm);
+        out.close();
+    }
 
     Mat output;
     if ( scanner_debug & DEBUG_PROCESSCROP)
@@ -1298,7 +1311,7 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
         cv::cvtColor( img8, output, cv::COLOR_GRAY2RGB);
     }
 
-    image.convertTo(image, CV_32FC1);
+    image.convertTo(image, PIXEL_MAT );
 
     /*////////////////////////////////////////
     *
@@ -1315,7 +1328,7 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
     for (int i = 0; i < image.rows; ++i)
         for (int j = 0; j < image.cols; ++j)
         {
-            l = image.at<float>(i, j) / LMAX * 100;
+            l = image.at<PIXEL>(i, j) / LMAX * 100;
 
             if ( bProfile )
                 l = s ( l );
@@ -1331,7 +1344,7 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
             else
                 d = DMAX;
 
-            image.at<float>(i, j) = d;
+            image.at<PIXEL>(i, j) = d;
         }
 
     if ( scanner_debug & DEBUG_RAWSCAN)
@@ -1409,13 +1422,13 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
     for (int i = 0; i < image.rows; ++i)
         for (int j = 0; j < image.cols; ++j)
         {
-            d = image.at<float>(i, j);
+            d = image.at<PIXEL>(i, j);
             if ( d > maxVal )
                 d = maxVal;
             else if ( d < minVal )
                 d = minVal;
 
-            image.at<float>(i, j) = ( d - minVal ) * factor;
+            image.at<PIXEL>(i, j) = ( d - minVal ) * factor;
         }
 
     /*////////////////////////////////////////
@@ -1451,145 +1464,6 @@ void Scanner::doprocess ( Frame &frame, int frameNumber )
     image.convertTo(image, CV_16UC1);
     onNewScan ( image, frameNumber );
 }
-
-/* void Scanner::doprocess ( Frame &frame, int frameNumber )
-{
-    if ( outputMode == RAW )
-    {
-        Scan image = frame.scan();
-        onNewScan ( image, frameNumber );
-        return;
-    }
-
-    if ( scanner_debug & DEBUG_RAWSCAN )
-        imwrite ( fmt::format ( "{}-debug-1-scan.png", frameNumber), frame.scan() );
-
-    //////////////////////////////////////////
-    //
-    // sharpen
-    //
-    ////
-
-    double sigma = scanDPI / 4000.0, threshold = 0, amount = 1.2; //0.6;
-
-    Mat blurred;
-    GaussianBlur(frame.scan() , blurred, Size(), sigma, sigma);
-    Mat lowContrastMask = abs(frame.scan() - blurred) < threshold;
-    Mat sharpened = frame.scan()*(1+amount) + blurred*(-amount);
-    frame.scan().copyTo(sharpened, lowContrastMask);
-    sharpened.copyTo ( frame.scan() );
-
-    if ( scanner_debug & DEBUG_RAWSCAN )
-        imwrite ( fmt::format ( "{}-debug-1-sharpen.png", frameNumber), frame.scan() );
-
-    //////////////////////////////////////////
-    //
-    // Parameters
-    //
-    ////
-
-    double crop_x100 = 12.5;
-
-    Scan image = frame.scan();
-    double ppmmw = image.ppmmw;
-    double ppmmh = image.ppmmh;
-    int w = image.size().width;
-    int h = image.size().height;
-
-    int targetw_px = round ( frame.targetw_mm * ppmmw );
-    int targeth_px = round ( frame.targeth_mm * ppmmh );
-    int crop_x100_px = round ( crop_x100 / 100 * std::min( frame.targetw_mm, frame.targeth_mm) * ppmmh ); // TODO: resize image
-
-    int cropw_px = targetw_px - crop_x100_px;
-    int croph_px = targeth_px - crop_x100_px;
-
-    int dbg_line = round ( 1 + 0.04 * ppmmh ); // TODO: resize image
-    double dbg_scale = 1080.0 / std::min ( w, h );
-
-    //////////////////////////////////////////
-    //
-    // Check and convert image
-    //
-    ////
-
-    Mat output;
-    if ( scanner_debug & DEBUG_PROCESSCROP)
-    {
-        Mat img8;
-        image.convertTo(img8, CV_8UC1, 1. / 256.);
-        cv::cvtColor( img8, output, cv::COLOR_GRAY2BGR);
-    }
-
-    Point center ( w / 2, h / 2);
-    Rect crop ( center.x - cropw_px / 2, center.y - croph_px / 2, cropw_px, croph_px );
-
-    //////////////////////////////////////////
-    //
-    // process
-    //
-    ////
-
-    vector<pixel> LUT, LUT1;
-    double minVal, maxVal;
-
-    // Calibration
-    if ( profile.expected.size())
-        LUT = getCalibLUT( profile );
-    else
-        LUT = getDefLUT ();
-    LUT = getLogLUT( LUT );
-    processImage( image, LUT );
-
-    if ( outputMode == ENDBV )
-    {
-        // Min/Max avg 1/10
-        Mat dst;
-        double factor = .25;
-        resize( image(crop), dst, cv::Size(), factor, factor, cv::INTER_LINEAR_EXACT);
-        minMaxLoc(dst, &minVal, &maxVal);
-
-        LUT = getNormLUT( minVal, maxVal );
-        processImage( image, LUT );
-    }
-
-//    imwrite( filename, rot );
-
-    if ( scanner_debug & DEBUG_PROCESSCROP)
-    {
-        cv::Scalar dbg_color ( 52, 167, 252 );
-        cv::line(output, Point ( 0, crop.y ), Point ( w, crop.y ), dbg_color, dbg_line );
-        cv::line(output, Point ( 0, crop.y + crop.height ), Point ( w, crop.y + crop.height ), dbg_color, dbg_line );
-        cv::line(output, Point ( crop.x, 0 ), Point ( crop.x, h ), dbg_color, dbg_line );
-        cv::line(output, Point ( crop.x + crop.width, 0 ), Point ( crop.x + crop.width, h ), dbg_color, dbg_line );
-
-        if ( frame.targeth_mm > frame.targetw_mm  )
-            rotate ( output, output, ROTATE_90_COUNTERCLOCKWISE);
-        else
-            rotate ( image, image, ROTATE_180);
-        cv::resize( output, output, Size (), dbg_scale, dbg_scale, cv::INTER_CUBIC );
-        imwrite ( fmt::format ( "{}-debug-2-crop.png", frameNumber ),  output );
-    }
-
-    if ( frame.targeth_mm > frame.targetw_mm  )
-        rotate ( image, image, ROTATE_90_COUNTERCLOCKWISE);
-    else
-        rotate ( image, image, ROTATE_180);
-
-    //////////////////////////////////////////
-    //
-    // resize
-    //
-    ////
-
-    if ( outputDPI )
-    {
-        double ratio = outputDPI / (double)scanDPI;
-        resize( image, image, Size(), ratio, ratio, INTER_CUBIC );
-    }
-
-    onNewScan ( image, frameNumber );
-}
-*/
 
 double get_mode ( vector<double> size, double approx )
 {
