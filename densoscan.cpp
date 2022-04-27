@@ -129,6 +129,8 @@ DensoScan::DensoScan(QWidget *parent)
     ui->rollName->setText( settings.value("rollName").toString() );
     ui->folderName->setText( settings.value("folderName").toString() );
     ui->startingIndex->setCurrentText( settings.value("startingIndex").toString() );
+    restoreGeometry(settings.value("geometry").toByteArray());
+    restoreState(settings.value("windowState").toByteArray());
     settings.endGroup();
 
 //    preview = imread ( "preview-output.png" );
@@ -142,6 +144,13 @@ onPreviewCompleted( preview );
 DensoScan::~DensoScan()
 {
     saveOptions();
+
+    QSettings settings("denso", "scan" );
+    settings.beginGroup("main");
+    settings.setValue("geometry", saveGeometry());
+    settings.setValue("windowState", saveState());
+    settings.endGroup();
+
     delete ui;
 }
 
@@ -317,7 +326,7 @@ void DensoScan::enableBatch( int enabled )
     ui->labelBatch->setEnabled(enabled);
     ui->checkBatch->setEnabled(enabled);
 
-    ui->comboBatch->setEnabled(ui->checkBatch->isChecked());
+    ui->comboBatch->setEnabled(ui->checkBatch->isChecked() || enabled );
 }
 
 void DensoScan::drawPreview()
