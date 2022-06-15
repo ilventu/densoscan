@@ -484,7 +484,6 @@ void DensoScan::enableOptions ( bool enabled  )
     ui->buttonRefresh->setEnabled(enabled);
     ui->brightness->setEnabled(enabled);
     ui->comboProfile->setEnabled(enabled);
-    ui->labelProfile->setEnabled(enabled);
     ui->folderName->setEnabled(enabled);
     ui->toolSelectFolder->setEnabled(enabled);
     ui->rollName->setEnabled(enabled);
@@ -511,7 +510,6 @@ void DensoScan::enableOptions ( bool enabled  )
         enabled = ui->comboOutputDPI->currentIndex();
 
     ui->comboInterpolation->setEnabled(enabled);
-    ui->labelInterpolation->setEnabled(enabled);
 }
 
 class PNGWriter

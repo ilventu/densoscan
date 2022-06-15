@@ -482,7 +482,7 @@ void Scanner::doscan ( std::vector <Box> boxes )
             time_t lastTime = time(NULL);
 
             nCurrentLine = ymin * ppmmh;
-            while ( !cancelling && read() )
+            while ( read() )
             {
                 for ( unsigned int i = 0; i < frames.size(); i++ )
                 {
