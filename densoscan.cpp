@@ -7,6 +7,7 @@
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgcodecs.hpp>
+#include <tiff.h>
 
 #include <sys/stat.h>
 #include <fmt/format.h>
@@ -547,8 +548,8 @@ public:
 
         png_text title_text;
         title_text.compression = PNG_TEXT_COMPRESSION_NONE;
-        title_text.key = "Title";
-        title_text.text = "My title";
+        title_text.key = (png_charp)"Title";
+        title_text.text = (png_charp)"My title";
         png_set_text(png_ptr, info_ptr, &title_text, 1);
         png_write_info(png_ptr, info_ptr);
     }
@@ -610,10 +611,10 @@ void DensoScan::on_pushScan_clicked()
 
         for ( unsigned int f = 0; f < batch; f++ )
         {
-            while ( file_exist( fmt::format ( "{} ({}).png", name, framenumber(offset) ) ) )
+            while ( file_exist( fmt::format ( "{} ({}).tiff", name, framenumber(offset) ) ) )
                 offset++;
 
-            filenames.push_back( fmt::format ( "{} ({}).png", name, framenumber(offset) ) );
+            filenames.push_back( fmt::format ( "{} ({}).tiff", name, framenumber(offset) ) );
             offset++;
         }
 
@@ -709,10 +710,10 @@ void DensoScan::onPreviewCompleted ( const Scan &preview )
     int rectTic = round ( ppmmh / 3);
     for ( unsigned int f = 0; f < frames.size(); f++ )
     {
-        while ( file_exist( fmt::format ( "{} ({}).png", name, framenumber(offset) ) ) )
+        while ( file_exist( fmt::format ( "{} ({}).tiff", name, framenumber(offset) ) ) )
             offset++;
 
-        filenames.push_back( fmt::format ( "{} ({}).png", name, framenumber(offset) ) );
+        filenames.push_back( fmt::format ( "{} ({}).tiff", name, framenumber(offset) ) );
 
         Rect rect_frame ( frames[f].y * ppmmh, output.size().height - ( frames[f].x + frames[f].width ) * ppmmw, frames[f].height * ppmmh, frames[f].width * ppmmw );
 
@@ -764,7 +765,13 @@ void DensoScan::doScan ( const vector<Box> &frames )
 void DensoScan::onNewScan ( Scan &image, int frameNumber )
 {
     std::string filename = filenames[frameNumber];
-    threads.push_back ( std::thread ( [ filename, image ] () { imwrite ( filename, image ); } ) );
+    threads.push_back ( std::thread ( [ filename, image ] () {
+        vector<int> compression_params;
+        compression_params.push_back(IMWRITE_TIFF_COMPRESSION);
+        compression_params.push_back(COMPRESSION_ADOBE_DEFLATE);
+
+        imwrite ( filename, image, compression_params );
+    } ) );
 }
 
 void DensoScan::customEvent(QEvent * event)
