@@ -30,29 +30,29 @@ include_directories(
 
 # File sorgenti
 set(SOURCES
-    main.cpp
-    densoscan.cpp
-    options.cpp
-    scanner.cpp
+    src/main.cpp
+    src/densoscan.cpp
+    src/options.cpp
+    src/scanner.cpp
     qrc_densoscan.cpp
 )
 
 # File header
 set(HEADERS
-    densoscan.h
-    options.h
-    scanner.h
+    src/densoscan.h
+    src/options.h
+    src/scanner.h
 )
 
 # File di UI (interfaccia utente)
 set(UI_FILES
-    densoscan.ui
-    options.ui
+    src/densoscan.ui
+    src/options.ui
 )
 
 # File di risorse
 set(RESOURCE_FILES
-    densoscan.qrc
+    src/densoscan.qrc
 )
 
 # Aggiungi il file di icone come risorsa
