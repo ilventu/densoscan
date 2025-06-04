@@ -1,1 +1,4 @@
 *.user
+build/*
+*.png
+.vscode/settings.json

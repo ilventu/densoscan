@@ -1276,7 +1276,7 @@ vector<Box> Scanner::guessFrames ( const Scan &preview, const vector<Slot> &hold
 
 void Scanner::doprocess ( Frame &frame, int frameNumber )
 {
-    double sigma = scanDPI / 2000.0, amount = 0.8;
+    double sigma = scanDPI / 1000.0, amount = 1;
 
     if ( outputMode == RAW )
     {
