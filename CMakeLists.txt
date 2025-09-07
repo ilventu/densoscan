@@ -16,8 +16,7 @@ pkg_check_modules(FMT REQUIRED fmt)
 pkg_check_modules(LIBPNG REQUIRED libpng)
 pkg_check_modules(OPENCV4 REQUIRED opencv4)
 
-# Trova i moduli di Qt5 necessari
-find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets Charts Multimedia)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Charts Multimedia)
 
 # Includi le directory dove si trovano gli header
 include_directories(
@@ -60,20 +59,20 @@ set(RC_ICONS
     icon/icon.ico
 )
 
-# Genera codice per i file UI e risorse
-qt5_wrap_ui(UI_HEADERS ${UI_FILES})
-qt5_add_resources(RESOURCE_SOURCES ${RESOURCE_FILES})
+# Genera codice per i file UI e risorse (Qt6 gestisce automaticamente con AUTOUIC/AUTORCC)
+set(UI_HEADERS)
+set(RESOURCE_SOURCES)
 
 # Compila l'eseguibile
 add_executable(densoscan ${SOURCES} ${HEADERS} ${UI_HEADERS} ${RESOURCE_SOURCES})
 
-# Collega le librerie di Qt e altre librerie
+# Collega le librerie di Qt6 e altre librerie
 target_link_libraries(densoscan
-    Qt5::Core
-    Qt5::Gui
-    Qt5::Widgets
-    Qt5::Charts
-    Qt5::Multimedia
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Charts
+    Qt6::Multimedia
     ${SANE_BACKENDS_LIBRARIES}
     ${FMT_LIBRARIES}
     ${LIBPNG_LIBRARIES}

@@ -640,7 +640,7 @@ void DensoScan::onScanCompleted ()
 
     if ( !cancelling )
     {
-        player.setMedia(QUrl("qrc:/sound/ding.mp3"));
+        player.setSource(QUrl("qrc:/sound/ding.mp3"));
         player.play();
     }
 
