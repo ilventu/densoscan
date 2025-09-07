@@ -1,11 +1,15 @@
 #include "densoscan.h"
+#include "densoscan_wx.h"
 
-#include <QApplication>
+#include <wx/wx.h>
 
-int main(int argc, char *argv[])
-{
-    QApplication a(argc, argv);
-    DensoScan w;
-    w.show();
-    return a.exec();
-}
+class MyApp : public wxApp {
+public:
+    virtual bool OnInit() override {
+        DensoScanFrame* frame = new DensoScanFrame("DensoScan");
+        frame->Show(true);
+        return true;
+    }
+};
+
+wxIMPLEMENT_APP(MyApp);

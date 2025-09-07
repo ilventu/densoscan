@@ -27,18 +27,22 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/build
 )
 
+
 # File sorgenti
 set(SOURCES
     src/main.cpp
     src/densoscan.cpp
     src/options.cpp
     src/scanner.cpp
+    src/densoscan_wx.cpp
     qrc_densoscan.cpp
 )
+
 
 # File header
 set(HEADERS
     src/densoscan.h
+    src/densoscan_wx.h
     src/options.h
     src/scanner.h
 )
@@ -66,13 +70,19 @@ set(RESOURCE_SOURCES)
 # Compila l'eseguibile
 add_executable(densoscan ${SOURCES} ${HEADERS} ${UI_HEADERS} ${RESOURCE_SOURCES})
 
-# Collega le librerie di Qt6 e altre librerie
+
+# Trova wxWidgets
+find_package(wxWidgets REQUIRED COMPONENTS core base)
+include(${wxWidgets_USE_FILE})
+
+# Collega le librerie di Qt6, wxWidgets e altre librerie
 target_link_libraries(densoscan
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
     Qt6::Charts
     Qt6::Multimedia
+    ${wxWidgets_LIBRARIES}
     ${SANE_BACKENDS_LIBRARIES}
     ${FMT_LIBRARIES}
     ${LIBPNG_LIBRARIES}
